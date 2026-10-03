@@ -4,6 +4,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.ConnectionPool
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -250,12 +251,21 @@ class ProtocolClient(
             explicitNulls = false
         }
 
+        /**
+         * Idle connections are dropped before the server drops them. Node closes an idle
+         * keep-alive socket after 5 s; OkHttp would keep it for 5 min and, for a GET, reuse it
+         * without probing. With retries off (rule 6) that reuse fails once as "unexpected end of
+         * stream", costing a backoff and an attempt. Evicting at 4 s avoids the stale socket.
+         */
+        const val IDLE_KEEP_ALIVE_MS = 4_000L
+
         /** We own retries (rule 6): OkHttp never silently retries a request. */
-        fun buildOkHttp(): OkHttpClient = OkHttpClient.Builder()
+        fun buildOkHttp(idleKeepAliveMs: Long = IDLE_KEEP_ALIVE_MS): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(false)
+            .connectionPool(ConnectionPool(5, idleKeepAliveMs, TimeUnit.MILLISECONDS))
             .build()
     }
 }

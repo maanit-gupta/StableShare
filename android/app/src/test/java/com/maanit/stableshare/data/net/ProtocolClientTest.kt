@@ -360,4 +360,59 @@ class ProtocolClientTest {
         assertEquals(ServerStats(12, 9, FaultCounts(3, 2, 1, 4, 5, 6), 7), stats)
         assertEquals("/admin/stats", server.takeRequest().target)
     }
+
+    /**
+     * Regression (found in Phase 4): a keep-alive connection the server closed while idle was
+     * reused for a GET and failed with "unexpected end of stream", because retries are off. The
+     * pool must evict idle connections before the server does (Node: 5 s).
+     */
+    @Test
+    fun idleConnectionsAreEvictedBeforeTheServerClosesThem() = runBlocking {
+        assertTrue(ProtocolClient.IDLE_KEEP_ALIVE_MS < NODE_KEEP_ALIVE_MS)
+        IdleClosingServer(idleCloseMs = 600).use { idle ->
+            val c = ProtocolClient(ProtocolClient.buildOkHttp(idleKeepAliveMs = 300), { idle.url })
+            assertTrue(c.health().ok)
+            delay(1_200) // the server has closed the idle socket by now
+            assertTrue("a fresh connection, not the stale one", c.health().ok)
+            assertEquals(2, idle.connections.get())
+        }
+    }
+
+    /** Minimal HTTP/1.1 server that, like Node, closes a keep-alive socket after it sits idle. */
+    private class IdleClosingServer(private val idleCloseMs: Int) : AutoCloseable {
+        private val socket = java.net.ServerSocket(0, 50, java.net.InetAddress.getLoopbackAddress())
+        val connections = java.util.concurrent.atomic.AtomicInteger()
+        val url = "http://127.0.0.1:${socket.localPort}"
+        private val acceptor = Thread {
+            while (!socket.isClosed) {
+                val s = runCatching { socket.accept() }.getOrNull() ?: break
+                connections.incrementAndGet()
+                Thread { serve(s) }.start()
+            }
+        }.apply { isDaemon = true; start() }
+
+        private fun serve(s: java.net.Socket) = s.use {
+            val input = s.getInputStream().bufferedReader()
+            val out = s.getOutputStream()
+            while (true) {
+                s.soTimeout = idleCloseMs
+                val requestLine = try { input.readLine() } catch (e: java.net.SocketTimeoutException) { null } ?: return
+                if (requestLine.isEmpty()) continue
+                while (input.readLine()?.isNotEmpty() == true) { /* skip headers */ }
+                val body = """{"ok":true}"""
+                out.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\n\r\n$body".toByteArray())
+                out.flush()
+            }
+        }
+
+        override fun close() {
+            socket.close()
+            acceptor.join(1_000)
+        }
+    }
+
+    private companion object {
+        /** Node's default http.Server keepAliveTimeout. */
+        const val NODE_KEEP_ALIVE_MS = 5_000L
+    }
 }
