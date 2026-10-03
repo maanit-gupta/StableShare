@@ -3,6 +3,7 @@ package com.maanit.stableshare.di
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
+import androidx.work.WorkManager
 import com.maanit.stableshare.data.db.AppDatabase
 import com.maanit.stableshare.data.files.FileStore
 import com.maanit.stableshare.data.net.AndroidConnectivityChecker
@@ -12,11 +13,29 @@ import com.maanit.stableshare.data.net.ProtocolClient
 import com.maanit.stableshare.data.repo.TransferRepository
 import com.maanit.stableshare.data.settings.SettingsRepository
 import com.maanit.stableshare.domain.RetryPolicy
+import com.maanit.stableshare.engine.AndroidConnectivityMonitor
+import com.maanit.stableshare.engine.DownloadPipeline
+import com.maanit.stableshare.engine.EngineBootstrap
+import com.maanit.stableshare.engine.PipelineEnv
+import com.maanit.stableshare.engine.TransferController
+import com.maanit.stableshare.engine.TransferEngine
+import com.maanit.stableshare.engine.TransferProgressTracker
+import com.maanit.stableshare.engine.UploadPipeline
+import com.maanit.stableshare.ui.LocalNetworkPermission
+import com.maanit.stableshare.worker.AppWorkerFactory
+import com.maanit.stableshare.worker.TransferNotifications
+import com.maanit.stableshare.worker.WorkManagerScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 
 /** Manual dependency injection: one instance of each collaborator per process. */
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
+
+    /** Outlives screens: cancel cleanup, bootstrap triggers. */
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val database: AppDatabase by lazy { AppDatabase.create(appContext) }
 
@@ -37,7 +56,62 @@ class AppContainer(context: Context) {
 
     val connectivityChecker: ConnectivityChecker by lazy { AndroidConnectivityChecker(appContext) }
 
+    val connectivityMonitor: AndroidConnectivityMonitor by lazy { AndroidConnectivityMonitor(appContext) }
+
     val errorClassifier: ErrorClassifier by lazy { ErrorClassifier(connectivityChecker) }
 
     val retryPolicy: RetryPolicy by lazy { RetryPolicy() }
+
+    val progressTracker: TransferProgressTracker by lazy { TransferProgressTracker() }
+
+    val notifications: TransferNotifications by lazy { TransferNotifications(appContext) }
+
+    private val pipelineEnv: PipelineEnv by lazy {
+        PipelineEnv(
+            repo = transferRepository,
+            classifier = errorClassifier,
+            retryPolicy = retryPolicy,
+            settings = { settingsRepository.current() },
+            tracker = progressTracker,
+            localNetworkGranted = { LocalNetworkPermission.isGranted(appContext) },
+        )
+    }
+
+    val scheduler: WorkManagerScheduler by lazy {
+        WorkManagerScheduler(
+            workManager = { WorkManager.getInstance(appContext) },
+            engineAcceptingWork = { transferEngine.isAcceptingWork() },
+        )
+    }
+
+    val transferEngine: TransferEngine by lazy {
+        TransferEngine(
+            repo = transferRepository,
+            settings = settingsRepository.settings,
+            connectivity = connectivityMonitor,
+            upload = UploadPipeline(protocolClient, fileStore, pipelineEnv),
+            download = DownloadPipeline(protocolClient, fileStore, pipelineEnv),
+            tracker = progressTracker,
+            wakeups = scheduler,
+        )
+    }
+
+    val transferController: TransferController by lazy {
+        TransferController(
+            repo = transferRepository,
+            api = protocolClient,
+            files = fileStore,
+            settings = { settingsRepository.current() },
+            scheduler = scheduler,
+            engine = transferEngine,
+        )
+    }
+
+    val workerFactory: AppWorkerFactory by lazy {
+        AppWorkerFactory(engine = { transferEngine }, scheduler = { scheduler }, notifications = { notifications })
+    }
+
+    val engineBootstrap: EngineBootstrap by lazy {
+        EngineBootstrap(transferRepository, settingsRepository.settings, connectivityMonitor, scheduler, applicationScope)
+    }
 }
