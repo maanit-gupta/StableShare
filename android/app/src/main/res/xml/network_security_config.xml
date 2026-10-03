@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext HTTP is allowed only because StableShare talks to a local mock server
+  (http://10.0.2.2:8080 from the emulator, or a LAN address the user enters in Settings).
+  See docs/DESIGN.md §3. A production build would pin HTTPS instead.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
