@@ -42,6 +42,8 @@ import com.maanit.stableshare.ui.transfers.DownloadSheet
 import com.maanit.stableshare.ui.transfers.DownloadSheetViewModel
 import com.maanit.stableshare.ui.transfers.TransfersScreen
 import com.maanit.stableshare.ui.transfers.TransfersViewModel
+import com.maanit.stableshare.ui.upload.UploadScreen
+import com.maanit.stableshare.ui.upload.UploadViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -158,6 +160,25 @@ fun StableShareRoot(
                 }
                 composable(Routes.TRANSFERS) {
                     TransfersRoute(container, navController)
+                }
+                composable(Routes.UPLOAD) {
+                    val vm = appViewModel {
+                        UploadViewModel(
+                            files = fileStore,
+                            uploadUri = { transferController.uploadUri(it) },
+                            repo = transferRepository,
+                            progress = progressTracker.progress,
+                            restored = transferEngine.restoredIds,
+                            classifier = errorClassifier,
+                            appScope = applicationScope,
+                        )
+                    }
+                    UploadScreen(
+                        vm,
+                        onBack = { navController.popBackStack() },
+                        onOpenDetail = { navController.navigate(Routes.detail(it)) },
+                        perform = { id, action -> container.applicationScope.launch { runCatching { container.transferController.perform(id, action) } } },
+                    )
                 }
                 composable(Routes.DETAIL, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                     val id = requireNotNull(entry.arguments?.getString("id"))
