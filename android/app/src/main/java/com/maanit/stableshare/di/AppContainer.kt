@@ -35,6 +35,9 @@ import okhttp3.OkHttpClient
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
+    /** UI facts that last for the life of the process (not persisted). */
+    val session = UiSession()
+
     /** Outlives screens: cancel cleanup, bootstrap triggers. */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -120,4 +123,10 @@ class AppContainer(context: Context) {
             transferRepository, settingsRepository.settings, connectivityMonitor, scheduler, applicationScope, restoredTransfers,
         )
     }
+}
+
+/** Per-process UI state: the animated splash plays once per cold start; permissions are asked once per process. */
+class UiSession {
+    @Volatile var splashShown = false
+    @Volatile var permissionsAsked = false
 }

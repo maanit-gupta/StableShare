@@ -2,4 +2,6 @@
 <resources>
     <!-- mint.bg (UI-SPEC §3.1): launcher icon background, system splash, notification accent. -->
     <color name="brand_mint">#FF7BBCA5</color>
+    <!-- neutral.page (UI-SPEC §3.2): window background behind Compose. -->
+    <color name="neutral_page">#FFEFF1F5</color>
 </resources>
