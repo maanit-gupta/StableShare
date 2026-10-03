@@ -30,6 +30,8 @@ import com.maanit.stableshare.di.AppContainer
 import com.maanit.stableshare.ui.components.NeutralSnackbarHost
 import com.maanit.stableshare.ui.detail.DetailScreen
 import com.maanit.stableshare.ui.detail.DetailViewModel
+import com.maanit.stableshare.ui.history.HistoryScreen
+import com.maanit.stableshare.ui.history.HistoryViewModel
 import com.maanit.stableshare.ui.nav.AppBottomBar
 import com.maanit.stableshare.ui.nav.Routes
 import com.maanit.stableshare.ui.onboarding.OnboardingScreen
@@ -160,6 +162,12 @@ fun StableShareRoot(
                 }
                 composable(Routes.TRANSFERS) {
                     TransfersRoute(container, navController)
+                }
+                composable(Routes.HISTORY) {
+                    val vm = appViewModel {
+                        HistoryViewModel(transferRepository, isGenerated = { fileStore.isGeneratedFile(it.localUri) }, appScope = applicationScope)
+                    }
+                    HistoryScreen(vm, onOpenDetail = { navController.navigate(Routes.detail(it)) })
                 }
                 composable(Routes.UPLOAD) {
                     val vm = appViewModel {
