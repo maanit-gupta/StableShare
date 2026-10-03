@@ -177,7 +177,7 @@ class TransferRepositoryTest {
         val id = upload()
         moveTo(id, TRANSFERRING, CANCELLED)
         for (target in TransferState.entries) assertFalse(repo.transition(id, target))
-        assertEquals(0, repo.reconcileAfterProcessStart())
+        assertEquals(0, repo.reconcileAfterProcessStart().size)
         assertTrue(repo.claimNextQueued(10).isEmpty())
         assertEquals(CANCELLED, state(id))
     }
@@ -430,7 +430,7 @@ class TransferRepositoryTest {
         val completed = upload().also { moveTo(it, TRANSFERRING, VERIFYING, COMPLETED) }
         val cancelled = upload().also { moveTo(it, CANCELLED) }
 
-        assertEquals(2, repo.reconcileAfterProcessStart())
+        assertEquals(2, repo.reconcileAfterProcessStart().size)
         assertEquals(QUEUED, state(transferring))
         assertEquals(QUEUED, state(verifying))
         assertEquals(RETRYING, state(retrying))
@@ -440,7 +440,7 @@ class TransferRepositoryTest {
         assertEquals(COMPLETED, state(completed))
         assertEquals(CANCELLED, state(cancelled))
         assertTrue(repo.getEvents(transferring).any { it.type == EventType.INFO && it.message.contains("Reconciled") })
-        assertEquals(0, repo.reconcileAfterProcessStart())
+        assertEquals(0, repo.reconcileAfterProcessStart().size)
     }
 
     @Test

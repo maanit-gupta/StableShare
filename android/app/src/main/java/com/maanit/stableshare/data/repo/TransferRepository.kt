@@ -217,10 +217,11 @@ class TransferRepository(
      * Run once per process start: a TRANSFERRING or VERIFYING row means the previous process died
      * mid-flight, so it goes back to QUEUED. Terminal, PAUSED, FAILED and RETRYING rows are left
      * alone (RETRYING keeps its persisted backoff and is picked up by [claimNextQueued]).
+     * Returns the ids it moved (the UI shows them as "restored after restart").
      */
-    suspend fun reconcileAfterProcessStart(): Int = db.withTransaction {
+    suspend fun reconcileAfterProcessStart(): List<String> = db.withTransaction {
         val stale = transfers.getInStates(listOf(TransferState.TRANSFERRING, TransferState.VERIFYING))
-        stale.count { row ->
+        stale.filter { row ->
             val ok = transitionLocked(
                 row.id, TransferState.QUEUED, null, null, null,
                 expectedFrom = row.state, reason = "reconciled after process start",
@@ -229,7 +230,7 @@ class TransferRepository(
                 insertEvent(row.id, EventType.INFO, "Reconciled after process start: ${row.state} → QUEUED")
             }
             ok
-        }
+        }.map { it.id }
     }
 
     /** RETRYING rows whose persisted backoff has elapsed go back to QUEUED. Returns how many moved. */

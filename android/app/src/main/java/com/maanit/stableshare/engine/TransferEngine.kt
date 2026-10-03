@@ -55,6 +55,7 @@ class TransferEngine(
     private val tracker: TransferProgressTracker,
     private val wakeups: WakeupScheduler,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val restored: RestoredTransfers = RestoredTransfers(),
 ) {
     private val runLock = Mutex()
     private val accepting = AtomicBoolean(false)
@@ -63,6 +64,9 @@ class TransferEngine(
 
     /** Transfer ids whose pipeline is running in this process. */
     val activeIds: StateFlow<Set<String>> = active.asStateFlow()
+
+    /** Transfers that restart reconciliation requeued in this process (UI-SPEC §5.4.2). */
+    val restoredIds: StateFlow<Set<String>> = restored.restored
 
     /**
      * True while a coordinator run is going and has not begun exiting: it will notice new rows by
@@ -107,7 +111,7 @@ class TransferEngine(
     }
 
     private suspend fun CoroutineScope.coordinate() {
-        repo.reconcileAfterProcessStart()
+        restored.add(repo.reconcileAfterProcessStart())
         repo.promoteDueRetries()
         if (connectivity.isOnline.value) repo.promoteWaitingForNetwork()
 

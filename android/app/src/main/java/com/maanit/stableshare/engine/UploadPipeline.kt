@@ -148,7 +148,7 @@ class UploadPipeline(
                 sentSha = data.sha256
                 session {
                     api.uploadChunk(id, index, data.bytes, data.sha256) { sent ->
-                        tracker.setInFlight(id, sent)
+                        tracker.setInFlight(id, sent, index)
                         if (sent >= length) bodySent = true
                     }
                 }

@@ -12,7 +12,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Process-level triggers for the coordinator, started from Application.onCreate:
- * leftover work at launch, the network coming back, and a maxConcurrent change.
+ * leftover work at launch, the network coming back, and a maxConcurrent change. It also keeps
+ * the restored-after-restart set free of finished or deleted transfers.
  */
 class EngineBootstrap(
     private val repo: TransferRepository,
@@ -20,6 +21,7 @@ class EngineBootstrap(
     private val connectivity: ConnectivityMonitor,
     private val scheduler: TransferScheduler,
     private val scope: CoroutineScope,
+    private val restored: RestoredTransfers = RestoredTransfers(),
 ) {
     fun start() {
         scope.launch {
@@ -36,6 +38,7 @@ class EngineBootstrap(
                 wasOnline = online
             }
         }
+        scope.launch { repo.observeTransfers().collect(restored::prune) }
         scope.launch {
             settings.map { it.maxConcurrent }.distinctUntilChanged().drop(1).collect { scheduler.ensureRunning() }
         }

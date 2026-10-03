@@ -73,4 +73,20 @@ class TransferProgressTrackerTest {
         tracker.setInFlight("t", 5) // late callback after the job ended: ignored
         assertTrue(tracker.progress.value.isEmpty())
     }
+
+    @Test
+    fun inFlightChunkIsTrackedUntilCommittedOrThePhaseChanges() {
+        tracker.start("t", 0, 10_000)
+        assertNull(tracker.progress.value.getValue("t").inFlightChunk)
+        tracker.setInFlight("t", 100, chunkIndex = 4)
+        assertEquals(4, tracker.progress.value.getValue("t").inFlightChunk)
+        tracker.setCommitted("t", 1_000)
+        assertNull(tracker.progress.value.getValue("t").inFlightChunk)
+
+        tracker.setInFlight("t", 50, chunkIndex = 5)
+        tracker.setPhase("t", TransferPhase.Transferring)
+        assertEquals(5, tracker.progress.value.getValue("t").inFlightChunk)
+        tracker.setPhase("t", TransferPhase.Retrying(9_000))
+        assertNull(tracker.progress.value.getValue("t").inFlightChunk)
+    }
 }

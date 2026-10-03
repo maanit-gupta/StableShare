@@ -123,7 +123,7 @@ class DownloadPipeline(
         private suspend fun fetchChunk(part: File, chunk: ChunkEntity) {
             val expected = requireNotNull(chunk.sha256)
             runner.run(Step.Chunk(chunk.index)) {
-                val body = api.downloadRange(fileId, chunk.offset, chunk.length, etag) { tracker.setInFlight(id, it) }
+                val body = api.downloadRange(fileId, chunk.offset, chunk.length, etag) { tracker.setInFlight(id, it, chunk.index) }
                 if (!body.sha256.equals(expected, ignoreCase = true)) {
                     throw ChunkHashMismatchException(chunk.index, expected, body.sha256)
                 }

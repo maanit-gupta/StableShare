@@ -24,6 +24,8 @@ data class LiveProgress(
     val committedBytes: Long,
     /** Bytes of the current chunk sent or received so far (not yet DONE). */
     val inFlightBytes: Long,
+    /** Index of the chunk currently moving, or null between chunks, while backing off or hashing. */
+    val inFlightChunk: Int? = null,
     val totalBytes: Long,
     val bytesPerSecond: Double,
     val etaSeconds: Long?,
@@ -54,17 +56,23 @@ class TransferProgressTracker(
     fun start(id: String, committedBytes: Long, totalBytes: Long, phase: TransferPhase = TransferPhase.Transferring) =
         synchronized(lock) {
             speeds[id] = Speed(clock(), committedBytes, null)
-            state.update { it + (id to LiveProgress(phase, committedBytes, 0, totalBytes, 0.0, null)) }
+            state.update { it + (id to LiveProgress(phase, committedBytes, 0, null, totalBytes, 0.0, null)) }
         }
 
-    fun setPhase(id: String, phase: TransferPhase) = modify(id) { it.copy(phase = phase) }
+    /** Leaving the Transferring phase means no chunk is moving any more. */
+    fun setPhase(id: String, phase: TransferPhase) = modify(id) {
+        it.copy(phase = phase, inFlightChunk = if (phase == TransferPhase.Transferring) it.inFlightChunk else null)
+    }
 
     /** A chunk was committed: [committedBytes] is the new bytesDone and nothing is in flight. */
     fun setCommitted(id: String, committedBytes: Long) = modify(id) {
-        it.copy(committedBytes = committedBytes, inFlightBytes = 0)
+        it.copy(committedBytes = committedBytes, inFlightBytes = 0, inFlightChunk = null)
     }
 
-    fun setInFlight(id: String, bytes: Long) = modify(id) { it.copy(inFlightBytes = bytes) }
+    /** [bytes] of chunk [chunkIndex] have moved so far; a null index means nothing is moving. */
+    fun setInFlight(id: String, bytes: Long, chunkIndex: Int? = null) = modify(id) {
+        it.copy(inFlightBytes = bytes, inFlightChunk = chunkIndex)
+    }
 
     fun clear(id: String) = synchronized(lock) {
         speeds.remove(id)

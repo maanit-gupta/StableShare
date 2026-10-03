@@ -399,6 +399,8 @@ class TransferEngineTest {
         withContext(Dispatchers.Default) { withTimeout(20_000) { b.engine.run() } }
 
         assertEquals(COMPLETED, b.state(id))
+        assertEquals("process B shows the row as restored", setOf(id), b.engine.restoredIds.value)
+        assertTrue("process A reconciled nothing", a.engine.restoredIds.value.isEmpty())
         (0 until 3).forEach { assertEquals("chunk $it fetched/sent once", 1, server.count(op, it)) }
         assertEquals("the in-flight chunk is redone once", 2, server.count(op, 3))
         assertEquals(1, server.count(op, 4))

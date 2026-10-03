@@ -17,6 +17,7 @@ import com.maanit.stableshare.engine.AndroidConnectivityMonitor
 import com.maanit.stableshare.engine.DownloadPipeline
 import com.maanit.stableshare.engine.EngineBootstrap
 import com.maanit.stableshare.engine.PipelineEnv
+import com.maanit.stableshare.engine.RestoredTransfers
 import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferEngine
 import com.maanit.stableshare.engine.TransferProgressTracker
@@ -64,6 +65,8 @@ class AppContainer(context: Context) {
 
     val progressTracker: TransferProgressTracker by lazy { TransferProgressTracker() }
 
+    val restoredTransfers: RestoredTransfers by lazy { RestoredTransfers() }
+
     val notifications: TransferNotifications by lazy { TransferNotifications(appContext) }
 
     private val pipelineEnv: PipelineEnv by lazy {
@@ -93,6 +96,7 @@ class AppContainer(context: Context) {
             download = DownloadPipeline(protocolClient, fileStore, pipelineEnv),
             tracker = progressTracker,
             wakeups = scheduler,
+            restored = restoredTransfers,
         )
     }
 
@@ -112,6 +116,8 @@ class AppContainer(context: Context) {
     }
 
     val engineBootstrap: EngineBootstrap by lazy {
-        EngineBootstrap(transferRepository, settingsRepository.settings, connectivityMonitor, scheduler, applicationScope)
+        EngineBootstrap(
+            transferRepository, settingsRepository.settings, connectivityMonitor, scheduler, applicationScope, restoredTransfers,
+        )
     }
 }
