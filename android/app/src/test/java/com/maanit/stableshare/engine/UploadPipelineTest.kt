@@ -162,7 +162,7 @@ class UploadPipelineTest {
         val h = harness()
         h.server.fault = { c ->
             if (c.op == Op.CHUNK && c.index == 1 && c.attempt == 1) {
-                h.net.isOnline.value = false
+                h.net.online = false
                 Fault.Before(ConnectException("Network is unreachable"))
             } else {
                 null
@@ -183,7 +183,7 @@ class UploadPipelineTest {
         val bootstrap = EngineBootstrap(h.repo, h.settings, h.net, h.scheduler, backgroundScope)
         bootstrap.start()
         val before = h.ensureRunningCalls.size
-        h.net.isOnline.value = true
+        h.net.online = true
         h.awaitRow(t.id) { it.state == com.maanit.stableshare.domain.TransferState.QUEUED }
         h.engine.run()
 

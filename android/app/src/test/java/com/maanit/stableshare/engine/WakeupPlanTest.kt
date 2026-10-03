@@ -40,4 +40,39 @@ class WakeupPlanTest {
         assertEquals(WakeupPlan(WakeupPlan.NETWORK_FLOOR_MS, true), WakeupPlan.compute(listOf(offline, row(TransferState.RETRYING, 60_000)), 0))
         assertEquals(WakeupPlan(2_000, true), WakeupPlan.compute(listOf(offline, row(TransferState.RETRYING, 2_000)), 0))
     }
+
+    @Test
+    fun gatedQueuedRowsWaitForTheNetwork() {
+        val queued = row(TransferState.QUEUED)
+        // Usable: QUEUED rows never need a wake-up (the coordinator runs them).
+        assertNull(WakeupPlan.compute(listOf(queued), 0))
+        // Offline, or metered with Wi-Fi only: wait for the network with the floor.
+        assertEquals(WakeupPlan(WakeupPlan.NETWORK_FLOOR_MS, true), WakeupPlan.compute(listOf(queued), 0, usable = false))
+        assertEquals(
+            WakeupPlan(WakeupPlan.NETWORK_FLOOR_MS, true, unmetered = true),
+            WakeupPlan.compute(listOf(queued), 0, usable = false, wifiOnly = true),
+        )
+    }
+
+    @Test
+    fun gatedDueRetriesDoNotWakeImmediately() {
+        // A due backoff cannot run while the gate is closed, so it waits like a network waiter.
+        assertEquals(
+            WakeupPlan(WakeupPlan.NETWORK_FLOOR_MS, true, unmetered = true),
+            WakeupPlan.compute(listOf(row(TransferState.RETRYING, 500)), 1_000, usable = false, wifiOnly = true),
+        )
+        assertEquals(
+            WakeupPlan(2_000, true, unmetered = true),
+            WakeupPlan.compute(listOf(row(TransferState.RETRYING, 500), row(TransferState.RETRYING, 3_000)), 1_000, usable = false, wifiOnly = true),
+        )
+    }
+
+    @Test
+    fun wifiOnlyAsksForAnUnmeteredNetwork() {
+        assertEquals(WakeupPlan(3_000, true, unmetered = true), WakeupPlan.compute(listOf(row(TransferState.RETRYING, 4_000)), 1_000, wifiOnly = true))
+        assertEquals(
+            WakeupPlan(WakeupPlan.NETWORK_FLOOR_MS, true, unmetered = true),
+            WakeupPlan.compute(listOf(row(TransferState.RETRYING, null)), 0, usable = false, wifiOnly = true),
+        )
+    }
 }

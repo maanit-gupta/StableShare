@@ -73,6 +73,16 @@ abstract class TransferDao {
     )
     internal abstract suspend fun recomputeBytesDone(id: String, now: Long)
 
+    /**
+     * A row waiting for the network (RETRYING, no nextRetryAt) takes a new reason. Only the error
+     * columns change; the state column is untouched (rule 1).
+     */
+    @Query(
+        """UPDATE transfers SET errorCode = :errorCode, errorMessage = :errorMessage, updatedAt = :now
+           WHERE id = :id AND state = 'RETRYING' AND nextRetryAt IS NULL""",
+    )
+    internal abstract suspend fun setWaitingReason(id: String, errorCode: ErrorCode, errorMessage: String, now: Long): Int
+
     @Query("UPDATE transfers SET attemptCount = attemptCount + 1, updatedAt = :now WHERE id = :id")
     internal abstract suspend fun incrementAttemptCount(id: String, now: Long)
 

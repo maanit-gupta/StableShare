@@ -606,6 +606,7 @@ Queue position counts QUEUED transfers in claim order, starting at 1.
 | ErrorCode | Short reason | Long reason |
 |---|---|---|
 | NETWORK_UNAVAILABLE | "No connection" | "You're offline. This continues on its own when you're back online." |
+| METERED_NETWORK | "Waiting for Wi-Fi" | "Wi-Fi only is on, so this continues when you connect to Wi-Fi. You can change this in Settings." |
 | TIMEOUT | "Server too slow" | "The server took too long to answer. Tap Retry to continue from where it stopped." |
 | CONNECTION_LOST | "Connection dropped" | "The connection dropped mid-transfer. Tap Retry to continue from where it stopped." |
 | SERVER_ERROR | "Server error" | "The server had a temporary problem. Tap Retry to continue." |

@@ -18,6 +18,8 @@ enum class ChunkStatus { PENDING, DONE, FAILED }
 
 enum class ErrorCode {
     NETWORK_UNAVAILABLE,
+    /** Wi-Fi only is on and the network is metered: waiting for an unmetered one. */
+    METERED_NETWORK,
     TIMEOUT,
     CONNECTION_LOST,
     SERVER_ERROR,

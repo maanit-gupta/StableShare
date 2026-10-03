@@ -9,6 +9,7 @@ import com.maanit.stableshare.data.settings.Settings
 import com.maanit.stableshare.domain.TransferAction
 import com.maanit.stableshare.domain.TransferState
 import com.maanit.stableshare.domain.TransferType
+import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferProgressTracker
 import com.maanit.stableshare.ui.model.Condition
@@ -54,7 +55,7 @@ class TransfersViewModel(
     tracker: TransferProgressTracker,
     restored: StateFlow<Set<String>>,
     settings: Flow<Settings>,
-    val isOnline: StateFlow<Boolean>,
+    val networkState: StateFlow<NetworkState>,
     private val health: suspend () -> Boolean,
     private val controller: TransferController,
     private val isGenerated: (TransferEntity) -> Boolean,

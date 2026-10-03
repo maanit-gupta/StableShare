@@ -5,6 +5,8 @@ import com.maanit.stableshare.data.files.PartFileMissingException
 import com.maanit.stableshare.data.files.SourceChangedException
 import com.maanit.stableshare.data.files.SourceMissingException
 import com.maanit.stableshare.domain.ErrorCode
+import com.maanit.stableshare.engine.NetworkPolicy
+import com.maanit.stableshare.engine.NetworkState
 import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,14 +23,16 @@ import java.net.UnknownHostException
 
 class ErrorClassifierTest {
 
-    private var online = true
-    private val classifier = ErrorClassifier { online }
+    private var state = NetworkState.Unmetered
+    private var wifiOnly = false
+    private val classifier = ErrorClassifier { NetworkPolicy.blockReason(state, NetworkPolicy.usable(state, wifiOnly)) }
 
     private fun http(status: Int, code: String? = null, retryAfterMs: Long? = null) =
         HttpStatusException(status, code, "msg", retryAfterMs = retryAfterMs)
 
     private fun retryable(code: ErrorCode) = Outcome.Retryable(code)
     private fun fatal(code: ErrorCode) = Outcome.Fatal(code)
+    private fun waitFor(code: ErrorCode) = Outcome.WaitForNetwork(code)
 
     @Test
     fun transportErrorsWhileOnline() {
@@ -42,11 +46,44 @@ class ErrorClassifierTest {
 
     @Test
     fun transportErrorsWhileOfflineWaitForNetwork() {
-        online = false
+        state = NetworkState.Offline
         listOf(
             SocketTimeoutException(), SocketException("reset"), ConnectException(), UnknownHostException(), IOException(),
-        ).forEach { assertEquals(it.toString(), Outcome.WaitForNetwork, classifier.classify(it)) }
-        assertEquals(ErrorCode.NETWORK_UNAVAILABLE, Outcome.WaitForNetwork.code)
+        ).forEach { assertEquals(it.toString(), waitFor(ErrorCode.NETWORK_UNAVAILABLE), classifier.classify(it)) }
+    }
+
+    @Test
+    fun transportErrorsOnMeteredWithWifiOnlyWaitForWifi() {
+        state = NetworkState.Metered
+        wifiOnly = true
+        listOf(
+            SocketTimeoutException(), SocketException("reset"), ConnectException(), UnknownHostException(), IOException(),
+        ).forEach { assertEquals(it.toString(), waitFor(ErrorCode.METERED_NETWORK), classifier.classify(it)) }
+        assertEquals(waitFor(ErrorCode.METERED_NETWORK), classifier.classify(http(400, "INCOMPLETE_BODY")))
+        // An answer from the server is not about the network.
+        assertEquals(retryable(ErrorCode.SERVER_ERROR), classifier.classify(http(503)))
+        assertEquals(fatal(ErrorCode.SESSION_CONFLICT), classifier.classify(http(409, "SESSION_CONFLICT")))
+    }
+
+    @Test
+    fun meteredWithoutWifiOnlyIsAnOrdinaryNetwork() {
+        state = NetworkState.Metered
+        assertEquals(retryable(ErrorCode.TIMEOUT), classifier.classify(SocketTimeoutException("read timed out")))
+        assertEquals(retryable(ErrorCode.CONNECTION_LOST), classifier.classify(SocketException("Connection reset")))
+    }
+
+    @Test
+    fun offlineWinsOverWifiOnly() {
+        state = NetworkState.Offline
+        wifiOnly = true
+        assertEquals(waitFor(ErrorCode.NETWORK_UNAVAILABLE), classifier.classify(ConnectException()))
+    }
+
+    @Test
+    fun aGuardStopWaitsWithItsOwnCode() {
+        // Whatever the network says by now, the guard's verdict stands.
+        assertEquals(waitFor(ErrorCode.METERED_NETWORK), classifier.classify(NetworkUnusableException(ErrorCode.METERED_NETWORK)))
+        assertEquals(waitFor(ErrorCode.NETWORK_UNAVAILABLE), classifier.classify(NetworkUnusableException(ErrorCode.NETWORK_UNAVAILABLE)))
     }
 
     @Test
@@ -97,8 +134,8 @@ class ErrorClassifierTest {
     @Test
     fun incompleteBodyIsATransportDrop() {
         assertEquals(retryable(ErrorCode.CONNECTION_LOST), classifier.classify(http(400, "INCOMPLETE_BODY")))
-        online = false
-        assertEquals(Outcome.WaitForNetwork, classifier.classify(http(400, "INCOMPLETE_BODY")))
+        state = NetworkState.Offline
+        assertEquals(waitFor(ErrorCode.NETWORK_UNAVAILABLE), classifier.classify(http(400, "INCOMPLETE_BODY")))
     }
 
     @Test
@@ -115,7 +152,7 @@ class ErrorClassifierTest {
 
     @Test
     fun localErrorsDoNotDependOnConnectivity() {
-        online = false
+        state = NetworkState.Offline
         assertEquals(fatal(ErrorCode.DISK_FULL), classifier.classify(DiskFullException("full")))
         assertEquals(fatal(ErrorCode.SOURCE_MISSING), classifier.classify(SourceMissingException("gone")))
         assertEquals(retryable(ErrorCode.SERVER_ERROR), classifier.classify(http(503)))
@@ -137,7 +174,8 @@ class ErrorClassifierTest {
         assertTrue(retryable(ErrorCode.CONNECTION_LOST).isAmbiguous)
         assertFalse(retryable(ErrorCode.SERVER_ERROR).isAmbiguous)
         assertFalse(retryable(ErrorCode.CHUNK_HASH_MISMATCH).isAmbiguous)
-        assertFalse(Outcome.WaitForNetwork.isAmbiguous)
+        assertFalse(waitFor(ErrorCode.NETWORK_UNAVAILABLE).isAmbiguous)
+        assertFalse(waitFor(ErrorCode.METERED_NETWORK).isAmbiguous)
         assertFalse(fatal(ErrorCode.UNKNOWN).isAmbiguous)
     }
 

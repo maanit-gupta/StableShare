@@ -52,7 +52,8 @@ data class CoordinatorStatus(
 
 /**
  * The coordinator (DESIGN.md §6): runs at most `maxConcurrent` pipelines at once, reacting to
- * database, settings and connectivity changes (no polling). It never writes COMPLETED; only a
+ * database, settings and connectivity changes (no polling), and claims nothing while the network
+ * is unusable (offline, or metered with Wi-Fi only on). It never writes COMPLETED; only a
  * pipeline's verification step does (rule 3). One [run] at a time per process.
  */
 class TransferEngine(
@@ -124,7 +125,7 @@ class TransferEngine(
     private suspend fun CoroutineScope.coordinate() {
         restored.add(repo.reconcileAfterProcessStart())
         repo.promoteDueRetries()
-        if (connectivity.isOnline.value) repo.promoteWaitingForNetwork()
+        if (connectivity.usableNetwork.value) repo.promoteWaitingForNetwork()
 
         val wake = Channel<Unit>(Channel.CONFLATED)
         val pipelines = CoroutineScope(coroutineContext + SupervisorJob(coroutineContext.job))
@@ -132,10 +133,10 @@ class TransferEngine(
             launch { repo.observeTransfers().collect { wake.trySend(Unit) } }
             launch { settings.map { it.maxConcurrent }.distinctUntilChanged().collect { wake.trySend(Unit) } }
             launch {
-                var wasOnline = connectivity.isOnline.value
-                connectivity.isOnline.collect { online ->
-                    if (online && !wasOnline) repo.promoteWaitingForNetwork()
-                    wasOnline = online
+                var wasUsable = connectivity.usableNetwork.value
+                connectivity.usableNetwork.collect { usable ->
+                    if (usable && !wasUsable) repo.promoteWaitingForNetwork()
+                    wasUsable = usable
                     wake.trySend(Unit)
                 }
             }
@@ -167,9 +168,11 @@ class TransferEngine(
         jobs.forEach { (id, job) -> if (id !in activeRows) job.cancel() }
 
         // Fill free slots; maxConcurrent is read fresh, so lowering it lets running jobs finish.
-        val maxConcurrent = settings.first().maxConcurrent
-        val free = maxConcurrent - jobs.count { !it.value.isCompleted }
-        if (free > 0) {
+        // Nothing is claimed while the network is unusable (offline, or metered with Wi-Fi only).
+        val s = settings.first()
+        val usable = connectivity.usableNetwork.value
+        val free = s.maxConcurrent - jobs.count { !it.value.isCompleted }
+        if (free > 0 && usable) {
             repo.claimNextQueued(free, exclude = jobs.keys).forEach { launchPipeline(pipelines, it, wake) }
         }
         publishActive()
@@ -178,11 +181,11 @@ class TransferEngine(
             accepting.set(false)
             val now = clock()
             val pending = repo.getInStates(TransferState.QUEUED, TransferState.RETRYING)
-            val runnable = pending.any {
+            val runnable = usable && pending.any {
                 it.state == TransferState.QUEUED || (it.nextRetryAt != null && it.nextRetryAt <= now)
             }
             if (!runnable) {
-                wakeups.schedule(WakeupPlan.compute(pending, now))
+                wakeups.schedule(WakeupPlan.compute(pending, now, usable, s.wifiOnly))
                 return null
             }
             accepting.set(true)
@@ -250,7 +253,10 @@ class TransferEngine(
                 }
             }.onFailure { Log.w(TAG, "requeue of $id after stop failed", it) }
         }
-        runCatching { wakeups.schedule(WakeupPlan(WakeupPlan.AFTER_STOP_MS, requiresNetwork = true)) }
+        runCatching {
+            val unmetered = settings.first().wifiOnly
+            wakeups.schedule(WakeupPlan(WakeupPlan.AFTER_STOP_MS, requiresNetwork = true, unmetered = unmetered))
+        }
         Log.i(TAG, "coordinator stopped ($reason); requeued ${owned.size} transfer(s)")
     }
 

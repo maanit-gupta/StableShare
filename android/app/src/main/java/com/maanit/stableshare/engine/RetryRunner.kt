@@ -20,6 +20,8 @@ class PipelineEnv(
     val retryPolicy: RetryPolicy,
     val settings: suspend () -> Settings,
     val tracker: TransferProgressTracker,
+    /** Ends a backoff early once the network has become unusable (Wi-Fi only, offline). */
+    val network: NetworkGuard,
     val clock: () -> Long = System::currentTimeMillis,
     /** Android 17+: false while ACCESS_LOCAL_NETWORK is denied (connects to the server time out). */
     val localNetworkGranted: () -> Boolean = { true },
@@ -56,8 +58,8 @@ sealed interface Step {
 
 /**
  * Runs pipeline steps with the error policy of DESIGN.md §7. Every failure ends in exactly one of:
- * success, a consumed attempt (≤ [RetryPolicy.maxAttemptsPerChunk] per step), waiting for the
- * network (RETRYING, job ends, no attempt consumed), or FAILED. One instance per pipeline run.
+ * success, a consumed attempt (≤ [RetryPolicy.maxAttemptsPerChunk] per step), waiting for a
+ * usable network (RETRYING, job ends, no attempt consumed), or FAILED. One instance per pipeline run.
  */
 internal class RetryRunner(private val id: String, private val env: PipelineEnv) {
     private val repo get() = env.repo
@@ -126,12 +128,7 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
                 if (step is Step.Chunk) repo.markChunkFailed(id, step.index, "${outcome.code}: $message")
                 fail(outcome.code, message)
             }
-            Outcome.WaitForNetwork -> {
-                val from = activeState() ?: throw PipelineSignal.Stop("not active")
-                repo.transition(id, TransferState.RETRYING, ErrorCode.NETWORK_UNAVAILABLE, message, nextRetryAt = null, expectedFrom = from)
-                env.tracker.setPhase(id, TransferPhase.WaitingForNetwork)
-                throw PipelineSignal.Stop("waiting for network")
-            }
+            is Outcome.WaitForNetwork -> waitForNetwork(outcome.code, message)
             is Outcome.Retryable -> {
                 if (step is Step.Chunk) repo.markChunkFailed(id, step.index, "${outcome.code}: $message")
                 if (!env.settings().autoRetryEnabled) fail(outcome.code, "$message (automatic retry is off)")
@@ -162,8 +159,22 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
         )
         env.tracker.setInFlight(id, 0)
         env.tracker.setPhase(id, TransferPhase.Retrying(at))
-        env.sleep(delayMs)
+        val blocked = env.network.sleep(delayMs, env.sleep)
         resumeTransferring()
+        // RETRYING → RETRYING is not a transition, so the network wait goes through TRANSFERRING,
+        // exactly as when a backoff ends and the next request finds no network.
+        if (blocked != null) waitForNetwork(blocked, "Network became unusable ($blocked) during the backoff")
+    }
+
+    /**
+     * RETRYING with [code] (NETWORK_UNAVAILABLE or METERED_NETWORK), no nextRetryAt and no attempt
+     * consumed; the job ends so the slot is free. A usable network promotes the row again.
+     */
+    private suspend fun waitForNetwork(code: ErrorCode, message: String): Nothing {
+        val from = activeState() ?: throw PipelineSignal.Stop("not active")
+        repo.transition(id, TransferState.RETRYING, code, message, nextRetryAt = null, expectedFrom = from)
+        env.tracker.setPhase(id, TransferPhase.WaitingForNetwork)
+        throw PipelineSignal.Stop("waiting for network ($code)")
     }
 
     private suspend fun resumeTransferring() {

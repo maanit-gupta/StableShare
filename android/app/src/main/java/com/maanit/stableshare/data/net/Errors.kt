@@ -1,5 +1,6 @@
 package com.maanit.stableshare.data.net
 
+import com.maanit.stableshare.domain.ErrorCode
 import java.io.IOException
 
 /** A non-2xx response with the server's `{error, message, …}` body decoded where possible. */
@@ -23,3 +24,9 @@ class ProtocolViolationException(message: String, cause: Throwable? = null) : IO
 /** A downloaded chunk's bytes do not hash to the manifest value (corrupted in transit). */
 class ChunkHashMismatchException(val index: Int, expected: String, actual: String) :
     IOException("Chunk $index hash mismatch: expected $expected, got $actual")
+
+/**
+ * The engine stopped (or never started) a request because the network may not be used: offline
+ * ([ErrorCode.NETWORK_UNAVAILABLE]) or metered with Wi-Fi only on ([ErrorCode.METERED_NETWORK]).
+ */
+class NetworkUnusableException(val code: ErrorCode) : IOException("Network not usable for transfers: $code")

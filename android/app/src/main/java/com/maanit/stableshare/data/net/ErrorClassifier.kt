@@ -17,10 +17,11 @@ sealed interface Outcome {
     /** Back off and retry; consumes one attempt of the current chunk. */
     data class Retryable(override val code: ErrorCode, val retryAfterMs: Long? = null) : Outcome
 
-    /** No network: RETRYING with NETWORK_UNAVAILABLE, no attempt consumed, resume on connectivity. */
-    data object WaitForNetwork : Outcome {
-        override val code = ErrorCode.NETWORK_UNAVAILABLE
-    }
+    /**
+     * The network may not be used ([code] NETWORK_UNAVAILABLE or METERED_NETWORK): RETRYING with
+     * that code, no attempt consumed, resume when a usable network returns.
+     */
+    data class WaitForNetwork(override val code: ErrorCode) : Outcome
 
     /** Stop: FAILED with this code. */
     data class Fatal(override val code: ErrorCode) : Outcome
@@ -33,12 +34,13 @@ sealed interface Outcome {
 val Outcome.isAmbiguous: Boolean
     get() = this is Outcome.Retryable && (code == ErrorCode.TIMEOUT || code == ErrorCode.CONNECTION_LOST)
 
-class ErrorClassifier(private val connectivity: ConnectivityChecker) {
+class ErrorClassifier(private val network: NetworkBlocker) {
 
     /** Never classifies cancellation: it is rethrown so structured concurrency keeps working. */
     fun classify(error: Throwable): Outcome {
         if (error is CancellationException) throw error
         return when {
+            error is NetworkUnusableException -> Outcome.WaitForNetwork(error.code)
             error is DiskFullException || error.isDiskFull() -> Outcome.Fatal(ErrorCode.DISK_FULL)
             error is SourceChangedException -> Outcome.Fatal(ErrorCode.SOURCE_CHANGED)
             error is SourceMissingException -> Outcome.Fatal(ErrorCode.SOURCE_MISSING)
@@ -82,9 +84,11 @@ class ErrorClassifier(private val connectivity: ConnectivityChecker) {
         else -> Outcome.Fatal(ErrorCode.UNKNOWN) // 413 and other 4xx: a client bug, retrying cannot help
     }
 
-    private fun classifyTransport(e: IOException): Outcome = when {
-        !connectivity.isNetworkAvailable() -> Outcome.WaitForNetwork
-        e is InterruptedIOException -> Outcome.Retryable(ErrorCode.TIMEOUT) // includes SocketTimeoutException
-        else -> Outcome.Retryable(ErrorCode.CONNECTION_LOST)
+    private fun classifyTransport(e: IOException): Outcome {
+        network.blockReason()?.let { return Outcome.WaitForNetwork(it) }
+        return when {
+            e is InterruptedIOException -> Outcome.Retryable(ErrorCode.TIMEOUT) // includes SocketTimeoutException
+            else -> Outcome.Retryable(ErrorCode.CONNECTION_LOST)
+        }
     }
 }

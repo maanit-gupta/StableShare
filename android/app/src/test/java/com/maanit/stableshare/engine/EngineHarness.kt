@@ -6,10 +6,10 @@ import androidx.room.Room
 import com.maanit.stableshare.data.db.AppDatabase
 import com.maanit.stableshare.data.db.TransferEntity
 import com.maanit.stableshare.data.files.FileStore
-import com.maanit.stableshare.data.net.ConnectivityChecker
 import com.maanit.stableshare.data.net.ErrorClassifier
 import com.maanit.stableshare.data.repo.TransferRepository
 import com.maanit.stableshare.data.settings.Settings
+import com.maanit.stableshare.domain.ErrorCode
 import com.maanit.stableshare.domain.EventType
 import com.maanit.stableshare.domain.RetryPolicy
 import com.maanit.stableshare.domain.TransferState
@@ -25,10 +25,39 @@ import java.io.RandomAccessFile
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.random.Random
 
-/** Online/offline switch shared by the connectivity monitor and the error classifier's checker. */
-class FakeConnectivity(online: Boolean = true) : ConnectivityMonitor, ConnectivityChecker {
-    override val isOnline = MutableStateFlow(online)
-    override fun isNetworkAvailable(): Boolean = isOnline.value
+/**
+ * The network as the engine, the guard and the classifier see it: a [state] plus the Wi-Fi only
+ * setting, with [usableNetwork] recomputed synchronously on every change.
+ */
+class FakeConnectivity(state: NetworkState = NetworkState.Unmetered, wifiOnly: Boolean = false) : ConnectivityMonitor {
+    override val networkState = MutableStateFlow(state)
+    override val usableNetwork = MutableStateFlow(NetworkPolicy.usable(state, wifiOnly))
+
+    var state: NetworkState
+        get() = networkState.value
+        set(value) {
+            networkState.value = value
+            recompute()
+        }
+
+    var wifiOnly: Boolean = wifiOnly
+        set(value) {
+            field = value
+            recompute()
+        }
+
+    /** Offline/online shorthand: online means an unmetered network. */
+    var online: Boolean
+        get() = state != NetworkState.Offline
+        set(value) {
+            state = if (value) NetworkState.Unmetered else NetworkState.Offline
+        }
+
+    override fun blockReason(): ErrorCode? = NetworkPolicy.blockReason(networkState.value, usableNetwork.value)
+
+    private fun recompute() {
+        usableNetwork.value = NetworkPolicy.usable(networkState.value, wifiOnly)
+    }
 }
 
 /** Disk-full simulation for [FileStore.writeChunkAt]. */
@@ -61,6 +90,10 @@ class EngineHarness(
     val files = FullDiskFileStore(context, File(dir, "downloads").apply { mkdirs() }, File(dir, "generated").apply { mkdirs() })
     val tracker = TransferProgressTracker(clock)
     val wakeups = CopyOnWriteArrayList<WakeupPlan?>()
+    val guard = NetworkGuard(net)
+
+    /** What the pipelines talk to: the fake server behind the network guard. */
+    val pipelineApi = GuardedTransferApi(server, guard)
     val ensureRunningCalls = CopyOnWriteArrayList<Long>()
     val env = PipelineEnv(
         repo = repo,
@@ -68,6 +101,7 @@ class EngineHarness(
         retryPolicy = RetryPolicy(random = Random(7)),
         settings = { this.settings.value },
         tracker = tracker,
+        network = guard,
         clock = clock,
         sleep = sleep ?: { delay(it) },
     )
@@ -75,8 +109,8 @@ class EngineHarness(
         repo = repo,
         settings = this.settings,
         connectivity = net,
-        upload = UploadPipeline(server, files, env),
-        download = DownloadPipeline(server, files, env),
+        upload = UploadPipeline(pipelineApi, files, env),
+        download = DownloadPipeline(pipelineApi, files, env),
         tracker = tracker,
         wakeups = { wakeups += it },
         clock = clock,
@@ -86,6 +120,13 @@ class EngineHarness(
 
     init {
         server.downloadChunkSize = settings.uploadChunkSizeBytes
+        net.wifiOnly = settings.wifiOnly
+    }
+
+    /** Flips the Wi-Fi only setting, as the Settings switch does (DataStore and the monitor's view). */
+    fun setWifiOnly(on: Boolean) {
+        settings.value = settings.value.copy(wifiOnly = on)
+        net.wifiOnly = on
     }
 
     /** A source file of [size] random bytes, queued for upload through the controller. */
@@ -112,6 +153,21 @@ class EngineHarness(
             if (c.op == op && c.index == index && c.attempt == 1) {
                 reached.complete(Unit)
                 awaitCancellation()
+            }
+        }
+        return reached
+    }
+
+    /**
+     * Like [holdAt], but the held request carries on once [release] completes (if it is still
+     * running by then).
+     */
+    fun holdUntil(op: FakeTransferServer.Op, index: Int, release: CompletableDeferred<Unit>): CompletableDeferred<Unit> {
+        val reached = CompletableDeferred<Unit>()
+        server.onRequest = { c ->
+            if (c.op == op && c.index == index && c.attempt == 1) {
+                reached.complete(Unit)
+                release.await()
             }
         }
         return reached

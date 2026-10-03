@@ -40,7 +40,7 @@ class WorkManagerScheduler(
             return
         }
         val constraints = Constraints.Builder()
-            .apply { if (plan.requiresNetwork) setRequiredNetworkType(NetworkType.CONNECTED) }
+            .apply { if (plan.requiresNetwork) setRequiredNetworkType(networkType(plan)) }
             .build()
         val request = OneTimeWorkRequestBuilder<CoordinatorWakeupWorker>()
             .setInitialDelay(plan.delayMs, TimeUnit.MILLISECONDS)
@@ -53,5 +53,9 @@ class WorkManagerScheduler(
     companion object {
         const val COORDINATOR = "transfer-coordinator"
         const val WAKEUP = "transfer-coordinator-wakeup"
+
+        /** Wi-Fi only waits for an unmetered network, otherwise any connected one. */
+        fun networkType(plan: WakeupPlan): NetworkType =
+            if (plan.unmetered) NetworkType.UNMETERED else NetworkType.CONNECTED
     }
 }

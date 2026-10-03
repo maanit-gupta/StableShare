@@ -242,14 +242,37 @@ class TransferRepository(
     }
 
     /**
-     * RETRYING rows waiting for connectivity (nextRetryAt = null) go back to QUEUED. Called when
-     * the network returns. Returns how many moved.
+     * RETRYING rows waiting for a usable network (NETWORK_UNAVAILABLE or METERED_NETWORK, no
+     * nextRetryAt) go back to QUEUED. Called when the network becomes usable. Only RETRYING rows
+     * move, so PAUSED and CANCELLED ones never do. Returns how many moved.
      */
     suspend fun promoteWaitingForNetwork(): Int = db.withTransaction {
         transfers.getInStates(listOf(TransferState.RETRYING))
-            .filter { it.nextRetryAt == null }
-            .count { promoteLocked(it.id, "network available") }
+            .filter { it.isWaitingForNetwork() }
+            .count { promoteLocked(it.id, "network usable") }
     }
+
+    /**
+     * Keeps waiting rows' reason in step with the network: [code] is NETWORK_UNAVAILABLE (offline)
+     * or METERED_NETWORK (metered, Wi-Fi only on). Changes only errorCode/errorMessage, never the
+     * state, and logs an INFO event per row. Returns how many changed.
+     */
+    suspend fun recodeNetworkWaiters(code: ErrorCode): Int = db.withTransaction {
+        require(code in NETWORK_WAIT_CODES) { "$code is not a network-wait code" }
+        val message = when (code) {
+            ErrorCode.NETWORK_UNAVAILABLE -> "Still waiting: now offline"
+            else -> "Still waiting: on mobile data with Wi-Fi only on"
+        }
+        transfers.getInStates(listOf(TransferState.RETRYING))
+            .filter { it.isWaitingForNetwork() && it.errorCode != code }
+            .count { row ->
+                val ok = transfers.setWaitingReason(row.id, code, message, clock()) > 0
+                if (ok) insertEvent(row.id, EventType.INFO, message)
+                ok
+            }
+    }
+
+    private fun TransferEntity.isWaitingForNetwork() = nextRetryAt == null || errorCode in NETWORK_WAIT_CODES
 
     private suspend fun promoteLocked(id: String, reason: String): Boolean = transitionLocked(
         id, TransferState.QUEUED, null, null, null, expectedFrom = TransferState.RETRYING, reason = reason,
@@ -375,5 +398,8 @@ class TransferRepository(
     private companion object {
         /** Stays under SQLite's 999 bound-variable limit on older Android versions. */
         const val SQL_BATCH = 500
+
+        /** The codes of a RETRYING row that waits for a usable network rather than a backoff. */
+        val NETWORK_WAIT_CODES = setOf(ErrorCode.NETWORK_UNAVAILABLE, ErrorCode.METERED_NETWORK)
     }
 }

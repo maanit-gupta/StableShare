@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -390,6 +391,78 @@ class TransferRepositoryTest {
         assertEquals(RETRYING, state(later))
         assertEquals(PAUSED, state(paused))
         assertEquals(0, repo.promoteWaitingForNetwork())
+    }
+
+    @Test
+    fun meteredWaitersArePromotedButPausedAndCancelledNeverAre() = runBlocking {
+        val metered = upload(at = 10)
+        moveTo(metered, TRANSFERRING)
+        repo.transition(metered, RETRYING, ErrorCode.METERED_NETWORK, "wifi only", nextRetryAt = null)
+        val pausedWhileWaiting = upload(at = 20)
+        moveTo(pausedWhileWaiting, TRANSFERRING)
+        repo.transition(pausedWhileWaiting, RETRYING, ErrorCode.METERED_NETWORK, "wifi only", nextRetryAt = null)
+        moveTo(pausedWhileWaiting, PAUSED)
+        val cancelledWhileWaiting = upload(at = 30)
+        moveTo(cancelledWhileWaiting, TRANSFERRING)
+        repo.transition(cancelledWhileWaiting, RETRYING, ErrorCode.NETWORK_UNAVAILABLE, "offline", nextRetryAt = null)
+        moveTo(cancelledWhileWaiting, CANCELLED)
+        val backingOff = upload(at = 40)
+        moveTo(backingOff, TRANSFERRING)
+        repo.transition(backingOff, RETRYING, ErrorCode.TIMEOUT, "slow", nextRetryAt = 60_000)
+
+        assertEquals(1, repo.promoteWaitingForNetwork())
+        assertEquals(QUEUED, state(metered))
+        assertEquals("keeps its code until it runs", ErrorCode.METERED_NETWORK, repo.getTransfer(metered)!!.errorCode)
+        assertEquals(PAUSED, state(pausedWhileWaiting))
+        assertEquals(CANCELLED, state(cancelledWhileWaiting))
+        assertEquals(RETRYING, state(backingOff))
+    }
+
+    @Test
+    fun recodeNetworkWaitersChangesOnlyTheReason() = runBlocking {
+        val waiting = upload(at = 10)
+        moveTo(waiting, TRANSFERRING)
+        repo.transition(waiting, RETRYING, ErrorCode.METERED_NETWORK, "wifi only", nextRetryAt = null)
+        val backingOff = upload(at = 20)
+        moveTo(backingOff, TRANSFERRING)
+        repo.transition(backingOff, RETRYING, ErrorCode.SERVER_ERROR, "503", nextRetryAt = 60_000)
+        val paused = upload(at = 30)
+        moveTo(paused, TRANSFERRING)
+        repo.transition(paused, RETRYING, ErrorCode.METERED_NETWORK, "wifi only", nextRetryAt = null)
+        moveTo(paused, PAUSED)
+        val stateEvents = repo.getEvents(waiting).count { it.type == EventType.STATE_CHANGE }
+
+        assertEquals(1, repo.recodeNetworkWaiters(ErrorCode.NETWORK_UNAVAILABLE))
+        val row = repo.getTransfer(waiting)!!
+        assertEquals(RETRYING, row.state)
+        assertEquals(ErrorCode.NETWORK_UNAVAILABLE, row.errorCode)
+        assertNull(row.nextRetryAt)
+        assertEquals("no STATE_CHANGE", stateEvents, repo.getEvents(waiting).count { it.type == EventType.STATE_CHANGE })
+        assertEquals("Still waiting: now offline", repo.getEvents(waiting).last().message)
+        assertEquals(ErrorCode.SERVER_ERROR, repo.getTransfer(backingOff)!!.errorCode)
+        assertEquals(PAUSED, state(paused))
+        assertEquals(ErrorCode.METERED_NETWORK, repo.getTransfer(paused)!!.errorCode)
+
+        assertEquals("already that code", 0, repo.recodeNetworkWaiters(ErrorCode.NETWORK_UNAVAILABLE))
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { repo.recodeNetworkWaiters(ErrorCode.TIMEOUT) } }
+        assertEquals(1, repo.recodeNetworkWaiters(ErrorCode.METERED_NETWORK))
+        assertEquals(ErrorCode.METERED_NETWORK, repo.getTransfer(waiting)!!.errorCode)
+    }
+
+    @Test
+    fun meteredNetworkCodeRoundTripsThroughRoomByName() = runBlocking {
+        // ErrorCode is stored by name (TEXT), so a new enum value needs no migration.
+        val id = upload()
+        moveTo(id, TRANSFERRING)
+        repo.transition(id, RETRYING, ErrorCode.METERED_NETWORK, "wifi only", nextRetryAt = null)
+        assertEquals(ErrorCode.METERED_NETWORK, repo.getTransfer(id)!!.errorCode)
+        val stored = withContext(Dispatchers.IO) {
+            db.query("SELECT errorCode FROM transfers WHERE id = ?", arrayOf(id)).use {
+                it.moveToFirst()
+                it.getString(0)
+            }
+        }
+        assertEquals("METERED_NETWORK", stored)
     }
 
     @Test

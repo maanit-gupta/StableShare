@@ -258,7 +258,7 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
             tracker = progressTracker,
             restored = transferEngine.restoredIds,
             settings = settingsRepository.settings,
-            isOnline = connectivityMonitor.isOnline,
+            networkState = connectivityMonitor.networkState,
             health = { protocolClient.health().ok },
             controller = transferController,
             isGenerated = { fileStore.isGeneratedFile(it.localUri) },

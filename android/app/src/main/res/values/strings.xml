@@ -304,6 +304,7 @@
 
     <!-- §7 Error copy: short reasons -->
     <string name="err_short_network_unavailable">No connection</string>
+    <string name="err_short_metered_network">Waiting for Wi-Fi</string>
     <string name="err_short_timeout">Server too slow</string>
     <string name="err_short_connection_lost">Connection dropped</string>
     <string name="err_short_server_error">Server error</string>
@@ -324,6 +325,7 @@
 
     <!-- §7 Error copy: long reasons -->
     <string name="err_long_network_unavailable">You\'re offline. This continues on its own when you\'re back online.</string>
+    <string name="err_long_metered_network">Wi-Fi only is on, so this continues when you connect to Wi-Fi. You can change this in Settings.</string>
     <string name="err_long_timeout">The server took too long to answer. Tap Retry to continue from where it stopped.</string>
     <string name="err_long_connection_lost">The connection dropped mid-transfer. Tap Retry to continue from where it stopped.</string>
     <string name="err_long_server_error">The server had a temporary problem. Tap Retry to continue.</string>

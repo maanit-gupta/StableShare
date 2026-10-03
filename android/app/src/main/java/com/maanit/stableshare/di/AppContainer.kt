@@ -6,8 +6,6 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.work.WorkManager
 import com.maanit.stableshare.data.db.AppDatabase
 import com.maanit.stableshare.data.files.FileStore
-import com.maanit.stableshare.data.net.AndroidConnectivityChecker
-import com.maanit.stableshare.data.net.ConnectivityChecker
 import com.maanit.stableshare.data.net.ErrorClassifier
 import com.maanit.stableshare.data.net.ProtocolClient
 import com.maanit.stableshare.data.repo.TransferRepository
@@ -16,6 +14,8 @@ import com.maanit.stableshare.domain.RetryPolicy
 import com.maanit.stableshare.engine.AndroidConnectivityMonitor
 import com.maanit.stableshare.engine.DownloadPipeline
 import com.maanit.stableshare.engine.EngineBootstrap
+import com.maanit.stableshare.engine.GuardedTransferApi
+import com.maanit.stableshare.engine.NetworkGuard
 import com.maanit.stableshare.engine.PipelineEnv
 import com.maanit.stableshare.engine.RestoredTransfers
 import com.maanit.stableshare.engine.TransferController
@@ -30,6 +30,7 @@ import com.maanit.stableshare.worker.WorkManagerScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.map
 import okhttp3.OkHttpClient
 
 /** Manual dependency injection: one instance of each collaborator per process. */
@@ -59,11 +60,16 @@ class AppContainer(context: Context) {
         ProtocolClient(okHttpClient, baseUrl = { settingsRepository.current().serverUrl })
     }
 
-    val connectivityChecker: ConnectivityChecker by lazy { AndroidConnectivityChecker(appContext) }
+    val connectivityMonitor: AndroidConnectivityMonitor by lazy {
+        AndroidConnectivityMonitor(appContext, settingsRepository.settings.map { it.wifiOnly }, applicationScope)
+    }
 
-    val connectivityMonitor: AndroidConnectivityMonitor by lazy { AndroidConnectivityMonitor(appContext) }
+    val errorClassifier: ErrorClassifier by lazy { ErrorClassifier(connectivityMonitor) }
 
-    val errorClassifier: ErrorClassifier by lazy { ErrorClassifier(connectivityChecker) }
+    private val networkGuard: NetworkGuard by lazy { NetworkGuard(connectivityMonitor) }
+
+    /** The pipelines' client: no request moves over a network transfers may not use (Wi-Fi only). */
+    private val pipelineApi by lazy { GuardedTransferApi(protocolClient, networkGuard) }
 
     val retryPolicy: RetryPolicy by lazy { RetryPolicy() }
 
@@ -90,6 +96,7 @@ class AppContainer(context: Context) {
             retryPolicy = retryPolicy,
             settings = { settingsRepository.current() },
             tracker = progressTracker,
+            network = networkGuard,
             localNetworkGranted = { LocalNetworkPermission.isGranted(appContext) },
         )
     }
@@ -106,8 +113,8 @@ class AppContainer(context: Context) {
             repo = transferRepository,
             settings = settingsRepository.settings,
             connectivity = connectivityMonitor,
-            upload = UploadPipeline(protocolClient, fileStore, pipelineEnv),
-            download = DownloadPipeline(protocolClient, fileStore, pipelineEnv),
+            upload = UploadPipeline(pipelineApi, fileStore, pipelineEnv),
+            download = DownloadPipeline(pipelineApi, fileStore, pipelineEnv),
             tracker = progressTracker,
             wakeups = scheduler,
             restored = restoredTransfers,

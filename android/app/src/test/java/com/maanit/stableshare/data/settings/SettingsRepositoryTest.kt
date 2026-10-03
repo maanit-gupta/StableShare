@@ -104,4 +104,19 @@ class SettingsRepositoryTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun wifiOnlyIsOffByDefaultAndPersists() = runBlocking {
+        assertFalse(repo.current().wifiOnly)
+        repo.settings.test {
+            assertFalse(awaitItem().wifiOnly)
+            repo.setWifiOnly(true)
+            assertTrue(awaitItem().wifiOnly)
+            cancelAndIgnoreRemainingEvents()
+        }
+        // A second repository over the same store (a new process) reads it back.
+        assertTrue(SettingsRepository(store).current().wifiOnly)
+        repo.setWifiOnly(false)
+        assertFalse(repo.current().wifiOnly)
+    }
 }

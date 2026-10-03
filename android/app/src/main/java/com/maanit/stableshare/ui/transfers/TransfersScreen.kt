@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.maanit.stableshare.R
 import com.maanit.stableshare.domain.TransferAction
+import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.ui.components.Banner
 import com.maanit.stableshare.ui.components.CancelTransferDialog
 import com.maanit.stableshare.ui.components.CountPill
@@ -86,7 +87,8 @@ fun TransfersScreen(
     downloadSheet: @Composable (onDismiss: () -> Unit) -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    val online by vm.isOnline.collectAsStateWithLifecycle()
+    val network by vm.networkState.collectAsStateWithLifecycle()
+    val online = network != NetworkState.Offline
     val reachable by vm.serverReachable.collectAsStateWithLifecycle()
     var chooser by rememberSaveable { mutableStateOf(false) }
     var download by rememberSaveable { mutableStateOf(false) }

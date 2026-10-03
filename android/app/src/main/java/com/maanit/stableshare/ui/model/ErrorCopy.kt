@@ -7,6 +7,7 @@ import com.maanit.stableshare.domain.ErrorCode
 object ErrorCopy {
     fun short(code: ErrorCode?, maxTries: Int): UiText = when (code ?: ErrorCode.UNKNOWN) {
         ErrorCode.NETWORK_UNAVAILABLE -> UiText.res(R.string.err_short_network_unavailable)
+        ErrorCode.METERED_NETWORK -> UiText.res(R.string.err_short_metered_network)
         ErrorCode.TIMEOUT -> UiText.res(R.string.err_short_timeout)
         ErrorCode.CONNECTION_LOST -> UiText.res(R.string.err_short_connection_lost)
         ErrorCode.SERVER_ERROR -> UiText.res(R.string.err_short_server_error)
@@ -25,6 +26,7 @@ object ErrorCopy {
 
     fun long(code: ErrorCode?, maxTries: Int): UiText = when (code ?: ErrorCode.UNKNOWN) {
         ErrorCode.NETWORK_UNAVAILABLE -> UiText.res(R.string.err_long_network_unavailable)
+        ErrorCode.METERED_NETWORK -> UiText.res(R.string.err_long_metered_network)
         ErrorCode.TIMEOUT -> UiText.res(R.string.err_long_timeout)
         ErrorCode.CONNECTION_LOST -> UiText.res(R.string.err_long_connection_lost)
         ErrorCode.SERVER_ERROR -> UiText.res(R.string.err_long_server_error)
