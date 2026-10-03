@@ -84,4 +84,10 @@ class FormatTest {
         assertEquals("Oct 2, 23:59", Format.activityTime(yesterday, now, zone, us))
         assertEquals("Oct 3, 09:05", Format.dateTime(earlierToday, zone, us))
     }
+
+    @Test
+    fun unbreakableBindsNumbersToUnits() {
+        assertEquals("891\u00A0KB/\u2060s", Format.unbreakable("891 KB/s"))
+        assertEquals("5\u00A0min\u00A028\u00A0s", Format.unbreakable("5 min 28 s"))
+    }
 }

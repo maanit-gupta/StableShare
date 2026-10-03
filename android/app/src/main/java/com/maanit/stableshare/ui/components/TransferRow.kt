@@ -97,7 +97,7 @@ fun TransferRow(
                 val speed = Format.speed(item.liveSpeed)
                 val eta = item.etaSeconds
                 if (speed != null && eta != null) {
-                    Text(stringResource(R.string.row_live, speed, Format.eta(eta)), style = Neutral.type.meta)
+                    Text(stringResource(R.string.row_live, Format.unbreakable(speed), Format.unbreakable(Format.eta(eta))), style = Neutral.type.meta)
                 }
                 if (item.restored) {
                     Spacer(Modifier.height(4.dp))

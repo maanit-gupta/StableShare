@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -30,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +65,12 @@ import com.maanit.stableshare.ui.theme.Neutral
 fun HistoryScreen(vm: HistoryViewModel, onOpenDetail: (String) -> Unit) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    // Newest first: a transfer that just finished is inserted above the first visible row, so
+    // keep the list at the top when it was already there.
+    LaunchedEffect(ui.items.firstOrNull()?.row?.id) {
+        if (listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+    }
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Column(Modifier.fillMaxSize().background(Neutral.colors.page).padding(top = top + 24.dp)) {
         Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -88,6 +96,7 @@ fun HistoryScreen(vm: HistoryViewModel, onOpenDetail: (String) -> Unit) {
         } else {
             LazyColumn(
                 Modifier.weight(1f),
+                state = listState,
                 contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -135,9 +144,9 @@ private fun HistoryRow(item: HistoryItem, onOpen: () -> Unit, onRemove: () -> Un
                 Text(
                     stringResource(
                         R.string.history_line,
-                        Format.size(row.fileSize),
-                        Format.duration(item.durationMs),
-                        Format.size(item.bytesPerSecond.toLong()) + "/s",
+                        Format.unbreakable(Format.size(row.fileSize)),
+                        Format.unbreakable(Format.duration(item.durationMs)),
+                        Format.unbreakable(Format.size(item.bytesPerSecond.toLong()) + "/s"),
                     ),
                     style = Neutral.type.meta,
                 )

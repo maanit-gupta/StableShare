@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -578,7 +579,12 @@ private fun Hoop(card: Rect, viewport: Rect, clock: Animatable<Float, *>, reduce
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
         modifier = Modifier
-            .offsetPx(corner - with(density) { Offset(0f, 24.dp.toPx()) })
+            .offsetPx(corner)
+            // Centred on the corner, then rising.
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, placeable.height) { placeable.place(-placeable.width / 2, -placeable.height / 2) }
+            }
             .graphicsLayer {
                 translationY = -rise
                 this.alpha = alpha

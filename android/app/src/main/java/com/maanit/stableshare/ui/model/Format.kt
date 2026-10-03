@@ -54,6 +54,12 @@ object Format {
     fun exactBytes(bytes: Long, locale: Locale = Locale.getDefault()): String =
         NumberFormat.getIntegerInstance(locale).format(bytes)
 
+    /**
+     * Keeps a formatted value on one line inside running text: no break between number and unit
+     * ("891 KB/s", "5 min 28 s") and none after the slash.
+     */
+    fun unbreakable(value: String): String = value.replace(' ', '\u00A0').replace("/", "/\u2060")
+
     /** "HH:mm:ss" for today, "MMM d, HH:mm" for another day. */
     fun activityTime(epochMs: Long, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String {
         val at = Instant.ofEpochMilli(epochMs).atZone(zone)

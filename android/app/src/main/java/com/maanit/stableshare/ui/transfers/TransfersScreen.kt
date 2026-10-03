@@ -189,7 +189,7 @@ private fun Header(ui: TransfersUi, onOpenSettings: (Boolean) -> Unit) {
     val speed = Format.speed(ui.speed)
     val subtitle = when {
         ui.activeCount == 0 && ui.waitingCount == 0 -> stringResource(R.string.transfers_idle)
-        speed != null -> stringResource(R.string.transfers_summary_speed, ui.activeCount, ui.waitingCount, speed)
+        speed != null -> stringResource(R.string.transfers_summary_speed, ui.activeCount, ui.waitingCount, Format.unbreakable(speed))
         else -> stringResource(R.string.transfers_summary, ui.activeCount, ui.waitingCount)
     }
     Text(subtitle, style = Neutral.type.subtitle)

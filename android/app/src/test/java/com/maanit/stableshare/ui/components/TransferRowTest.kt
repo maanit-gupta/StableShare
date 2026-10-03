@@ -76,7 +76,8 @@ class TransferRowTest {
     fun transferringShowsTheLiveLine() {
         show(item(row(TransferState.TRANSFERRING), LiveProgress(TransferPhase.Transferring, 84 * mb, 0, 3, 200 * mb, 4.1 * mb, 28)))
         compose.onNodeWithText("Uploading…").assertExists()
-        compose.onNodeWithText("4.1 MB/s, 28 s left").assertExists()
+        // Number and unit never split across lines.
+        compose.onNodeWithText("4.1\u00A0MB/\u2060s, 28\u00A0s left").assertExists()
         assertButtons("Pause", "Cancel")
     }
 
