@@ -41,7 +41,7 @@ class TransferNotifications(private val context: Context) {
             else -> "${status.active} transfers running"
         }
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_transfer)
+            .setSmallIcon(R.drawable.ic_stat_plane)
             .setContentTitle(title)
             .setContentText(if (status.totalBytes > 0) "${status.percent}% · ${mb(status.bytes)} / ${mb(status.totalBytes)} MB" else null)
             .setProgress(100, status.percent, status.totalBytes <= 0)
