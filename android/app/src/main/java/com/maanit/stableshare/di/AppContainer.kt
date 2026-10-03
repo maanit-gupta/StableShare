@@ -25,6 +25,7 @@ import com.maanit.stableshare.engine.UploadPipeline
 import com.maanit.stableshare.ui.LocalNetworkPermission
 import com.maanit.stableshare.worker.AppWorkerFactory
 import com.maanit.stableshare.worker.TransferNotifications
+import com.maanit.stableshare.worker.TransferResultNotifier
 import com.maanit.stableshare.worker.WorkManagerScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +72,16 @@ class AppContainer(context: Context) {
     val restoredTransfers: RestoredTransfers by lazy { RestoredTransfers() }
 
     val notifications: TransferNotifications by lazy { TransferNotifications(appContext) }
+
+    val resultNotifier: TransferResultNotifier by lazy {
+        TransferResultNotifier(
+            transfers = transferRepository.observeTransfers(),
+            completed = notifications::completed,
+            failed = notifications::failed,
+            post = notifications::postResult,
+            scope = applicationScope,
+        )
+    }
 
     private val pipelineEnv: PipelineEnv by lazy {
         PipelineEnv(

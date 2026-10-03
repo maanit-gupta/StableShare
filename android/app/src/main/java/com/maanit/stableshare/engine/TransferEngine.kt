@@ -36,8 +36,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Aggregate numbers for the foreground notification. */
-data class CoordinatorStatus(val active: Int, val bytes: Long, val totalBytes: Long) {
+/**
+ * Aggregate numbers for the foreground notification: running pipelines, their combined progress,
+ * transfers queued or running ([pending]) and their combined live speed.
+ */
+data class CoordinatorStatus(
+    val active: Int,
+    val bytes: Long,
+    val totalBytes: Long,
+    val pending: Int = active,
+    val bytesPerSecond: Double = 0.0,
+) {
     val percent: Int get() = if (totalBytes <= 0) 0 else ((bytes * 100) / totalBytes).toInt()
 }
 
@@ -89,6 +98,8 @@ class TransferEngine(
                 active = ids.size,
                 bytes = mine.sumOf { live[it.id]?.bytes ?: it.bytesDone },
                 totalBytes = mine.sumOf { it.fileSize },
+                pending = rows.count { it.state == TransferState.QUEUED || StateMachine.isActive(it.state) },
+                bytesPerSecond = ids.sumOf { live[it]?.bytesPerSecond ?: 0.0 },
             )
         }.distinctUntilChanged()
 

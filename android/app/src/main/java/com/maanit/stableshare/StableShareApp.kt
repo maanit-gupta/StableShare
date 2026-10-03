@@ -22,5 +22,6 @@ class StableShareApp : Application(), Configuration.Provider {
         container.notifications.ensureChannel()
         container.connectivityMonitor.start()
         container.engineBootstrap.start()
+        container.resultNotifier.start()
     }
 }
