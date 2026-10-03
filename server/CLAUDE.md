@@ -9,7 +9,7 @@ Env defaults: PORT=8080, HOST=0.0.0.0, STORAGE_DIR=./storage, DEFAULT_CHUNK_SIZE
 - All metadata lives on disk, so a server restart loses nothing. Every metadata write is atomic: temp file → fsync → rename.
 - Stream request and response bodies; never buffer a whole file in memory. Hash while streaming.
 - Errors are JSON: { "error": "CODE", "message": "..." } with the status codes in DESIGN.md §3.
-- Storage layout: storage/uploads/<id>/meta.json and chunks/<index>.bin; storage/completed/; storage/files/<fileId>.bin + .manifest.json.
+- Storage layout: storage/uploads/<id>/meta.json and chunks/<index>.bin; storage/completed/; storage/files/<fileId>.bin + <fileId>.meta.json + <fileId>.manifest.<chunkSize>.json.
 - Fault injection is one readable middleware module, applied to /api/* only, never /admin or /health, using a seeded PRNG so tests are deterministic.
 - Each test uses a fresh temp STORAGE_DIR. Restart tests re-create the app on the same directory.
 - Log every request: method, path, status, duration, uploadId and chunk index.

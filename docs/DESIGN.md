@@ -114,6 +114,7 @@ General conventions:
 - Each chunk of a file has a fixed `chunkSize`, except the last one, which may be shorter. The number of chunks is `totalChunks = ceil(fileSize / chunkSize)`, so a zero-byte file has 0 chunks. Chunk `i` covers `[i·chunkSize, min(fileSize, (i+1)·chunkSize))`.
 - Limits: `fileSize` ≤ 1 GiB, and `chunkSize` lies between 1 KiB and 64 MiB inclusive. The server default is 2 MiB (`DEFAULT_CHUNK_SIZE`).
 - When the server rejects a request before reading its body, it adds `Connection: close`.
+- An unknown route returns `404 {"error":"NOT_FOUND"}`. Malformed JSON returns `400 INVALID_REQUEST`. Any other unexpected failure returns `500 INTERNAL`, which the client classifies as retryable.
 
 ### 3.1 Uploads
 
@@ -239,6 +240,8 @@ Every response carries `ETag` (strong, quoted), `Accept-Ranges: bytes` and `Cont
 | start ≥ size, zero-byte file, malformed or multi-range | `416 RANGE_NOT_SATISFIABLE`, `Content-Range: bytes */size` |
 | unknown file | `404 FILE_NOT_FOUND` |
 
+`HEAD` returns the same status and headers with no body.
+
 Example:
 ```http
 GET /api/files/sample-200MB/content
@@ -292,6 +295,23 @@ When faults are enabled, each `/api/*` request draws from one seeded PRNG in a f
 | `dropMidBodyRate` | socket destroyed partway through the request body (chunk PUT) or the response body (downloads and JSON) |
 | `dropAfterProcessRate` | chunk PUT or complete fully processed and persisted, then the socket is destroyed instead of sending the 2xx (the lost-response case) |
 | `corruptRate` | one byte flipped in a download body |
+
+### 3.4 Reference client (`server/scripts/cli-client.js`)
+The CLI implements the client half of this protocol: the same algorithm as the Android pipelines, with a JSON sidecar playing the role of Room.
+
+- **Upload sidecar** `<path>.stableshare-upload.json`: `{uploadId, path, size, mtimeMs, sha256, chunkSize, createdAt}`. It is written atomically *before* the first request. On restart, if size, mtime or sha256 differ, the CLI fails with `SOURCE_CHANGED`.
+- **Download sidecar** `<out>.stableshare-download.json`: `{fileId, etag, size, sha256, chunkSize, doneChunks}`, next to `<out>.part`. On restart:
+  - an etag change gives `REMOTE_CHANGED`
+  - every chunk in `doneChunks` is re-hashed from the `.part` file, and mismatches are re-downloaded
+- **Retries** follow §7 and §8. A chunk PUT or `complete` that failed ambiguously is followed by GET status before any resend. `ECONNREFUSED` and similar are WAITING, bounded by `--max-wait-ms`.
+- **Output.** stdout carries `resume: …`, `progress i/N …` and `RESULT {json}`. The chaos script greps these lines.
+- **Exit codes**: 0 means verified success, 1 means `FAILED <CODE>: message`, 2 means usage error.
+
+`server/scripts/chaos-test.sh` exercises the client under faults:
+- It seeds, then starts the server on `CHAOS_PORT` (default 18080).
+- It enables latency 20 ± 20 ms, 10 % errors, 5 % dropAfterProcess, 5 % dropMidBody and 2 % corrupt with a fixed seed.
+- It uploads and then downloads `sample-200MB`. Each CLI run is killed with `kill -9` after 30 chunks and rerun. The script asserts that the second run resumed rather than starting from 0.
+- It asserts that both SHA-256 values equal the seeded hash, and that error, dropMidBody and dropAfterProcess faults actually fired.
 
 ---
 
@@ -460,7 +480,7 @@ delay(attempt) = random_uniform(0, min(30 s, 1 s × 2^(attempt−1)))
 - The cap is 30 s.
 - A chunk gets at most 5 attempts. When the 5th attempt fails, the transfer goes to `FAILED RETRIES_EXHAUSTED`.
 - A successful chunk resets the counter for the next chunk.
-- A `Retry-After` header on 429/503 is honoured as a lower bound, capped at 30 s.
+- The Android pipeline honours a `Retry-After` header on 429/503 as a lower bound, capped at 30 s. The mock server never sends one, so the CLI ignores it.
 
 **Bounded by construction.** Every loop ends in one of four ways: success, a consumed attempt (at most 5), waiting on a connectivity signal (an external event), or FAILED.
 
@@ -529,17 +549,17 @@ Where it is "Tested" by:
 
 | # | Scenario | Expected behaviour | Where handled | How tested |
 |---|---|---|---|---|
-| 1 | Zero-byte file | Upload: `totalChunks 0`; `complete` succeeds right away with the empty-string hash. Download: manifest `chunks: []`; Range → 416, so the client skips the transfer and verifies the empty file. | `routes/uploads.js`, `routes/files.js`; pipelines | `uploads.test.js` "zero-byte upload"; `files.test.js` "416"; Phase 3 unit test |
-| 2 | Size not divisible by chunk size | Last chunk is shorter. The server expects exactly that length, and the manifest's last entry has the remainder. | `expectedChunkLength()` | `uploads.test.js` "odd-size last chunk"; `files.test.js` manifest test; seed `sample-odd` |
+| 1 | Zero-byte file | Upload: `totalChunks 0`; `complete` succeeds right away with the empty-string hash. Download: manifest `chunks: []`; Range → 416, so the client skips the transfer and verifies the empty file. | `routes/uploads.js`, `routes/files.js`; pipelines | `uploads.test.js` "zero-byte upload"; `files.test.js` "416 for unsatisfiable, multi-range, zero-byte"; Phase 3 unit test |
+| 2 | Size not divisible by chunk size | Last chunk is shorter. The server expects exactly that length, and the manifest's last entry has the remainder. | `expectedChunkLength()` | `uploads.test.js` "odd-size last chunk"; `files.test.js` "manifest chunk hashes recompute correctly"; seed `sample-odd` |
 | 3 | Duplicate chunk | `200 already_received`, file not rewritten (mtime unchanged), `dedupedChunks++` | chunk PUT | `uploads.test.js` "duplicate chunk" |
 | 4 | Wrong-hash chunk | `422 CHUNK_HASH_MISMATCH`, temp deleted, nothing recorded; the client retries (a consumed attempt) | chunk PUT | `uploads.test.js` "wrong hash rejected and not stored" |
 | 5 | Wrong-length chunk | `400 CHUNK_LENGTH_MISMATCH` (short) / `413 CHUNK_TOO_LARGE` (long); fatal for the client (bug) | chunk PUT | `uploads.test.js` "wrong length" |
-| 6 | Lost response after a chunk was processed | Client: GET status shows the chunk, so no resend; any resend gets `already_received` | §8; CLI `sendChunk` | `faults.test.js` "dropAfterProcess"; chaos (5 % dropAfterProcess) |
-| 7 | `complete` response lost | Client: GET status says COMPLETED with sha256, so the client verifies and completes. Calling `complete` again returns the same 200. | §8; `complete` idempotent | `uploads.test.js` "finalize idempotent"; `faults.test.js` "dropAfterProcess complete"; chaos |
+| 6 | Lost response after a chunk was processed | Client: GET status shows the chunk, so no resend; any resend gets `already_received` | §8; CLI `sendChunk` | `faults.test.js` "dropAfterProcess: socket destroyed, yet status lists the chunk…"; chaos (5 % dropAfterProcess) |
+| 7 | `complete` response lost | Client: GET status says COMPLETED with sha256, so the client verifies and completes. Calling `complete` again returns the same 200. | §8; `complete` idempotent | `uploads.test.js` "finalize idempotent"; `faults.test.js` "dropAfterProcess on complete"; chaos |
 | 8 | Server restart mid-transfer | All metadata is on disk. The client sees connection refused (WAITING), then GET status and resumes. | `storage.js` atomic writes | `uploads.test.js` "server restart keeps sessions and chunks" |
 | 9 | Session expired (24 h) | 404 `SESSION_NOT_FOUND` leads to `FAILED SESSION_EXPIRED`. Manual retry creates a new session id. | sweeper; client classification | `uploads.test.js` "sweeper expires idle sessions" |
-| 10 | Remote file changed mid-download | If-Range mismatch returns 200 instead of 206, giving `FAILED REMOTE_CHANGED`. A changed manifest etag on resume is the same failure. | content route; download pipeline | `files.test.js` "If-Range mismatch after mutate" |
-| 11 | Source modified or deleted mid-upload | Size, mtime or hash check fails, giving `FAILED SOURCE_CHANGED` / `SOURCE_MISSING`. | upload pipeline / CLI resume check | CLI resume check (manual); Phase 3 instrumented test |
+| 10 | Remote file changed mid-download | If-Range mismatch returns 200 instead of 206, giving `FAILED REMOTE_CHANGED`. A changed manifest etag on resume is the same failure. | content route; download pipeline | `files.test.js` "If-Range after the remote file changed"; CLI resume after `mutate` → `REMOTE_CHANGED` |
+| 11 | Source modified or deleted mid-upload | Size, mtime or hash check fails, giving `FAILED SOURCE_CHANGED` / `SOURCE_MISSING`. | upload pipeline / CLI resume check | CLI: upload killed, source edited, rerun → `FAILED SOURCE_CHANGED` (verified manually in Phase 1); Phase 3 instrumented test |
 | 12 | Disk full | Server: ENOSPC gives 507 `INSUFFICIENT_STORAGE`, which is fatal. Client: free space is checked before a download starts, and an ENOSPC during a write is `FAILED DISK_FULL`. | error handler; download pipeline | Phase 3 unit test with a fake file system |
 | 13 | Pause during chunk write | The in-flight call is cancelled. The partial chunk is never marked DONE, because the guarded write requires TRANSFERRING. Resume re-sends or re-downloads that chunk. | pipeline + guarded `UPDATE` | Phase 2 DAO test, Phase 3 pipeline test |
 | 14 | Cancel during chunk write | CAS → CANCELLED. The pipeline's later writes match 0 rows. Server `DELETE` / `.part` deleted. | repository + pipeline | Phase 2/3 tests; `DELETE` idempotent in `uploads.test.js` |
@@ -547,8 +567,9 @@ Where it is "Tested" by:
 | 16 | App killed during VERIFYING | Reconciliation sets `VERIFYING → QUEUED`. The re-run calls `complete` (idempotent) or re-hashes the `.part` file. | reconciliation; idempotent complete | `uploads.test.js` "finalize idempotent"; Phase 3 test |
 | 17 | Network flapping | Each loss is WAITING (no attempt consumed). Each return resumes from GET status / DONE chunks. Mid-body drops are RETRYABLE. | connectivity monitor; classification | chaos (dropMidBody, errors); Phase 3 test |
 | 18 | Same file transferred twice | Each transfer has its own uploadId and its own session, so two copies are stored. Downloads to the same target get distinct names (`name (1).bin`), so there are no shared `.part` files. | client id generation; target naming | `uploads.test.js` uses separate ids; Phase 3 test |
-| 19 | Download body corrupted in transit | The chunk hash does not match the manifest, so the chunk is retried (consumed attempt). After 5 failures: `FAILED HASH_MISMATCH`. | download pipeline / CLI | `faults.test.js` "corrupt"; chaos (2 % corrupt) |
-| 20 | Request hangs forever | The client's read timeout fires, which is RETRYABLE and ambiguous. GET status follows before the resend. | OkHttp timeouts / CLI timeout | `faults.test.js` "timeout persists nothing" |
+| 19 | Download body corrupted in transit | The chunk hash does not match the manifest, so the chunk is retried (consumed attempt). After 5 failures: `FAILED HASH_MISMATCH`. | download pipeline / CLI | `faults.test.js` "corrupt: exactly one byte flipped"; chaos (2 % corrupt) |
+| 20 | Request hangs forever | The client's read timeout fires, which is RETRYABLE and ambiguous. GET status follows before the resend. | OkHttp timeouts / CLI timeout | `faults.test.js` "timeout: request never answered and nothing persisted" |
 | 21 | Client killed mid-transfer and restarted | Resumes from the sidecar (CLI) or Room (app). Already-sent or already-written chunks are skipped after verification. | CLI sidecar; reconciliation | chaos (kill -9 and rerun for both directions) |
 | 22 | Crash between the chunk write and the DB update | Download: the chunk stays PENDING and is re-downloaded. Upload: GET status reports it. | write ordering §5.3 | chaos kill -9 |
 | 23 | Create session with the same id but different params | `409 SESSION_CONFLICT` (fatal) | create route | `uploads.test.js` "idempotent create" |
+| 24 | Partial download corrupted on disk while the client was down | On-disk re-hash of DONE chunks finds the mismatch, so that chunk alone is re-downloaded. | CLI/pipeline resume verification | CLI: `.part` bytes overwritten between runs → "chunk 0 failed on-disk verification", then a verified RESULT (manual, Phase 1) |

@@ -63,11 +63,22 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - Before ending: update the Phase tracker and append to Decisions and Open issues below. Keep this file under 200 lines.
 
 ## Phase tracker
-- [ ] Phase 1 — DESIGN.md + mock server + CLI client
+- [x] Phase 1 — DESIGN.md + mock server + CLI client (2026-10-03: 32 server tests green, chaos test passing)
 - [ ] Phase 2 — Android foundation (data/domain layer)
 - [ ] Phase 3 — Transfer engine
 - [ ] Phase 4 — UI, README, release APK
 
 ## Decisions (append: date — decision — why)
+- 2026-10-03 — Server on Express 5 (ESM), sole runtime dependency; tests use node:test + supertest — matches server/CLAUDE.md, async handlers forward errors natively.
+- 2026-10-03 — Chunk PUT success is 200 with `status: "stored"` (duplicate: `"already_received"`); create is 201 new / 200 existing — clients treat any 2xx as success, the status field distinguishes.
+- 2026-10-03 — Limits: fileSize ≤ 1 GiB, chunkSize 1 KiB–64 MiB (default 2 MiB) — 1 KiB minimum keeps tests fast, 64 MiB caps memory per chunk.
+- 2026-10-03 — Seed data = AES-256-CTR keystream keyed by sha256("stableshare-seed:<fileId>"); ETag = quoted sha256 — reproducible hashes on every machine, ETag changes iff content changes.
+- 2026-10-03 — Manifest cache file is files/<fileId>.manifest.<chunkSize>.json (one per chunk size), invalidated by ETag — spec asks for per-chunk-size caching.
+- 2026-10-03 — Multi-range or malformed Range → 416 (not ignored) — protocol is single-range only; explicit failure beats a surprise 200.
+- 2026-10-03 — /admin/faults/reset also zeroes /admin/stats; dropAfterProcess only applies to chunk PUT and complete — those are the only persisted-then-reply operations.
+- 2026-10-03 — CLI client state = JSON sidecars (<path>.stableshare-upload.json, <out>.stableshare-download.json + <out>.part); chaos test runs its own server on port 18080 — avoids clashing with a dev server on 8080.
+- 2026-10-03 — `server:CLAUDE.md` (macOS colon artefact) moved to server/CLAUDE.md.
 
 ## Open issues (append; remove when resolved)
+- Disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem); Android-side DISK_FULL lands in Phase 3.
+- Not yet pushed to the GitHub remote (origin is configured).
