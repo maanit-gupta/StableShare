@@ -355,6 +355,53 @@ class TransferRepositoryTest {
     }
 
     @Test
+    fun claimSkipsExcludedIds() = runBlocking {
+        val owned = upload(at = 10)
+        moveTo(owned, TRANSFERRING)
+        repo.transition(owned, RETRYING, ErrorCode.SERVER_ERROR, "503", nextRetryAt = 0)
+        val queued = upload(at = 20)
+        assertEquals(listOf(queued), repo.claimNextQueued(5, exclude = listOf(owned)).map { it.id })
+        assertEquals(RETRYING, state(owned))
+        assertEquals(listOf(owned), repo.claimNextQueued(5).map { it.id })
+    }
+
+    @Test
+    fun promoteDueRetriesAndNetworkWaitersToQueued() = runBlocking {
+        val due = upload(at = 10)
+        moveTo(due, TRANSFERRING)
+        repo.transition(due, RETRYING, ErrorCode.SERVER_ERROR, "503", nextRetryAt = 2_000)
+        val later = upload(at = 20)
+        moveTo(later, TRANSFERRING)
+        repo.transition(later, RETRYING, ErrorCode.SERVER_ERROR, "503", nextRetryAt = 9_000)
+        val offline = upload(at = 30)
+        moveTo(offline, TRANSFERRING)
+        repo.transition(offline, RETRYING, ErrorCode.NETWORK_UNAVAILABLE, "offline", nextRetryAt = null)
+        val paused = upload(at = 40)
+        moveTo(paused, PAUSED)
+
+        now = 2_000
+        assertEquals(1, repo.promoteDueRetries())
+        assertEquals(QUEUED, state(due))
+        assertEquals(RETRYING, state(later))
+        assertEquals(RETRYING, state(offline))
+
+        assertEquals(1, repo.promoteWaitingForNetwork())
+        assertEquals(QUEUED, state(offline))
+        assertEquals(RETRYING, state(later))
+        assertEquals(PAUSED, state(paused))
+        assertEquals(0, repo.promoteWaitingForNetwork())
+    }
+
+    @Test
+    fun setSourceInfoRecordsHashAndMtime() = runBlocking {
+        val id = upload()
+        assertTrue(repo.setSourceInfo(id, "AB".repeat(32), 1234L))
+        val t = repo.getTransfer(id)!!
+        assertEquals("ab".repeat(32), t.sha256)
+        assertEquals(1234L, t.sourceLastModified)
+    }
+
+    @Test
     fun concurrentClaimsNeverOverlap() = runBlocking {
         val ids = (1..12).map { upload(at = it.toLong()) }
         val results = (1..6).map {

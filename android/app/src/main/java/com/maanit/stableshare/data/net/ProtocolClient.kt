@@ -32,11 +32,11 @@ class ProtocolClient(
     private val client: OkHttpClient,
     private val baseUrl: suspend () -> String,
     private val json: Json = DefaultJson,
-) {
+) : TransferApi {
 
     // ---- uploads ----
 
-    suspend fun createSession(uploadId: String, request: CreateSessionRequest): CreateSessionResponse =
+    override suspend fun createSession(uploadId: String, request: CreateSessionRequest): CreateSessionResponse =
         send(
             Request.Builder()
                 .url(url("api", "uploads", uploadId))
@@ -44,12 +44,12 @@ class ProtocolClient(
         ) { decode(it) }
 
     /** Streams [bytes] in 64 KiB segments; [onProgress] receives bytes written so far. */
-    suspend fun uploadChunk(
+    override suspend fun uploadChunk(
         uploadId: String,
         index: Int,
         bytes: ByteArray,
         sha256: String,
-        onProgress: (Long) -> Unit = {},
+        onProgress: (Long) -> Unit,
     ): ChunkUploadResponse = send(
         Request.Builder()
             .url(url("api", "uploads", uploadId, "chunks", index.toString()))
@@ -57,10 +57,10 @@ class ProtocolClient(
             .put(ProgressRequestBody(bytes, onProgress)),
     ) { decode(it) }
 
-    suspend fun getUploadStatus(uploadId: String): UploadStatus =
+    override suspend fun getUploadStatus(uploadId: String): UploadStatus =
         send(Request.Builder().url(url("api", "uploads", uploadId)).get()) { decode(it) }
 
-    suspend fun completeUpload(uploadId: String): CompleteResponse =
+    override suspend fun completeUpload(uploadId: String): CompleteResponse =
         send(
             Request.Builder()
                 .url(url("api", "uploads", uploadId, "complete"))
@@ -68,16 +68,16 @@ class ProtocolClient(
         ) { decode(it) }
 
     /** Idempotent: 204 whether or not the session existed. */
-    suspend fun deleteUpload(uploadId: String) {
+    override suspend fun deleteUpload(uploadId: String) {
         send(Request.Builder().url(url("api", "uploads", uploadId)).delete()) { }
     }
 
     // ---- downloads ----
 
-    suspend fun listFiles(): List<RemoteFile> =
+    override suspend fun listFiles(): List<RemoteFile> =
         send(Request.Builder().url(url("api", "files")).get()) { decode(it) }
 
-    suspend fun getManifest(fileId: String, chunkSize: Int? = null): Manifest {
+    override suspend fun getManifest(fileId: String, chunkSize: Int?): Manifest {
         val u = url("api", "files", fileId, "manifest").newBuilder()
             .apply { if (chunkSize != null) addQueryParameter("chunkSize", chunkSize.toString()) }
             .build()
@@ -89,12 +89,12 @@ class ProtocolClient(
      * the exact Content-Range we asked for. A 200 means the ETag no longer matches: the body is
      * discarded unread and [RemoteFileChangedException] is thrown.
      */
-    suspend fun downloadRange(
+    override suspend fun downloadRange(
         fileId: String,
         offset: Long,
         length: Int,
         etag: String,
-        onProgress: (Long) -> Unit = {},
+        onProgress: (Long) -> Unit,
     ): RangeBody {
         require(offset >= 0 && length > 0) { "invalid range $offset+$length" }
         val last = offset + length - 1

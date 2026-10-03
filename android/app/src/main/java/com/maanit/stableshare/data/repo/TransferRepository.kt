@@ -196,13 +196,14 @@ class TransferRepository(
 
     /**
      * Atomically claims up to [limit] runnable transfers, oldest first, and moves each to
-     * TRANSFERRING. Runnable = QUEUED, or RETRYING whose nextRetryAt has passed. Room serialises
-     * write transactions, so two concurrent callers never claim the same row.
+     * TRANSFERRING. Runnable = QUEUED, or RETRYING whose nextRetryAt has passed. Rows in [exclude]
+     * (transfers whose pipeline is still running in this process, e.g. backing off in RETRYING) are
+     * skipped. Room serialises write transactions, so two concurrent callers never claim the same row.
      */
-    suspend fun claimNextQueued(limit: Int): List<TransferEntity> {
+    suspend fun claimNextQueued(limit: Int, exclude: Collection<String> = emptyList()): List<TransferEntity> {
         if (limit <= 0) return emptyList()
         return db.withTransaction {
-            transfers.claimable(clock(), limit).mapNotNull { candidate ->
+            transfers.claimable(clock(), limit, exclude.toList()).mapNotNull { candidate ->
                 val ok = transitionLocked(
                     candidate.id, TransferState.TRANSFERRING, null, null, null,
                     expectedFrom = candidate.state, reason = "claimed",
@@ -230,6 +231,28 @@ class TransferRepository(
             ok
         }
     }
+
+    /** RETRYING rows whose persisted backoff has elapsed go back to QUEUED. Returns how many moved. */
+    suspend fun promoteDueRetries(): Int = db.withTransaction {
+        val now = clock()
+        transfers.getInStates(listOf(TransferState.RETRYING))
+            .filter { it.nextRetryAt != null && it.nextRetryAt <= now }
+            .count { promoteLocked(it.id, "backoff elapsed") }
+    }
+
+    /**
+     * RETRYING rows waiting for connectivity (nextRetryAt = null) go back to QUEUED. Called when
+     * the network returns. Returns how many moved.
+     */
+    suspend fun promoteWaitingForNetwork(): Int = db.withTransaction {
+        transfers.getInStates(listOf(TransferState.RETRYING))
+            .filter { it.nextRetryAt == null }
+            .count { promoteLocked(it.id, "network available") }
+    }
+
+    private suspend fun promoteLocked(id: String, reason: String): Boolean = transitionLocked(
+        id, TransferState.QUEUED, null, null, null, expectedFrom = TransferState.RETRYING, reason = reason,
+    )
 
     // ---- chunks ----
 
@@ -298,6 +321,10 @@ class TransferRepository(
 
     suspend fun setSha256(id: String, sha256: String): Boolean =
         transfers.setSha256(id, sha256.lowercase(), clock()) > 0
+
+    /** Upload: the source hash and mtime recorded once, before the session is created. */
+    suspend fun setSourceInfo(id: String, sha256: String, lastModified: Long?): Boolean =
+        transfers.setSourceInfo(id, sha256.lowercase(), lastModified, clock()) > 0
 
     suspend fun setEtag(id: String, etag: String): Boolean = transfers.setEtag(id, etag, clock()) > 0
 

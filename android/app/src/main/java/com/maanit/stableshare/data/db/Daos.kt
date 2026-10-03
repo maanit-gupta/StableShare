@@ -57,11 +57,12 @@ abstract class TransferDao {
 
     @Query(
         """SELECT * FROM transfers
-           WHERE state = 'QUEUED'
-              OR (state = 'RETRYING' AND nextRetryAt IS NOT NULL AND nextRetryAt <= :now)
+           WHERE (state = 'QUEUED'
+                  OR (state = 'RETRYING' AND nextRetryAt IS NOT NULL AND nextRetryAt <= :now))
+             AND id NOT IN (:exclude)
            ORDER BY createdAt, id LIMIT :limit""",
     )
-    internal abstract suspend fun claimable(now: Long, limit: Int): List<TransferEntity>
+    internal abstract suspend fun claimable(now: Long, limit: Int, exclude: List<String>): List<TransferEntity>
 
     @Query(
         """UPDATE transfers SET
@@ -80,6 +81,12 @@ abstract class TransferDao {
 
     @Query("UPDATE transfers SET sha256 = :sha256, updatedAt = :now WHERE id = :id")
     internal abstract suspend fun setSha256(id: String, sha256: String, now: Long): Int
+
+    @Query(
+        """UPDATE transfers SET sha256 = :sha256, sourceLastModified = :lastModified, updatedAt = :now
+           WHERE id = :id""",
+    )
+    internal abstract suspend fun setSourceInfo(id: String, sha256: String, lastModified: Long?, now: Long): Int
 
     @Query("UPDATE transfers SET etag = :etag, updatedAt = :now WHERE id = :id")
     internal abstract suspend fun setEtag(id: String, etag: String, now: Long): Int
