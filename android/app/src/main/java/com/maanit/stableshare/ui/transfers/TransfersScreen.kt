@@ -64,6 +64,7 @@ import com.maanit.stableshare.ui.components.NeutralTextButton
 import com.maanit.stableshare.ui.components.OutlinedNeutralButton
 import com.maanit.stableshare.ui.components.PrimaryButton
 import com.maanit.stableshare.ui.components.SectionHeader
+import com.maanit.stableshare.ui.components.StatusBarScrim
 import com.maanit.stableshare.ui.components.TransferRow
 import com.maanit.stableshare.ui.mascot.CloudPlane
 import com.maanit.stableshare.ui.mascot.MascotIllustration
@@ -144,6 +145,7 @@ fun TransfersScreen(
                 Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.fab_new_transfer), modifier = Modifier.size(24.dp))
             }
         }
+        StatusBarScrim(Neutral.colors.page)
     }
 
     if (chooser) {

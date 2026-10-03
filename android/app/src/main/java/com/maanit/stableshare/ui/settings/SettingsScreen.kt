@@ -88,6 +88,7 @@ import com.maanit.stableshare.ui.components.OutlinedNeutralButton
 import com.maanit.stableshare.ui.components.PrimaryButton
 import com.maanit.stableshare.ui.components.SegmentedControl
 import com.maanit.stableshare.ui.components.SelectChip
+import com.maanit.stableshare.ui.components.StatusBarScrim
 import com.maanit.stableshare.ui.components.neutralCard
 import com.maanit.stableshare.ui.model.text
 import com.maanit.stableshare.ui.theme.LocalReducedMotion
@@ -119,61 +120,63 @@ fun SettingsScreen(
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val s = settings ?: return Box(Modifier.fillMaxSize().background(Neutral.colors.page))
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Neutral.colors.page)
-            .verticalScroll(rememberScrollState())
-            .padding(start = 24.dp, end = 24.dp, top = top + 24.dp, bottom = 24.dp),
-    ) {
-        Text(stringResource(R.string.settings_title), style = Neutral.type.title)
+    Box(Modifier.fillMaxSize().background(Neutral.colors.page)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, top = top + 24.dp, bottom = 24.dp),
+        ) {
+            Text(stringResource(R.string.settings_title), style = Neutral.type.title)
 
-        Section(stringResource(R.string.settings_section_server)) { ServerCard(vm, s.serverUrl) }
-        Section(stringResource(R.string.settings_section_transfers), Modifier.bringIntoViewRequester(transfersSection)) {
-            Label(stringResource(R.string.settings_concurrency))
-            SegmentedControl(
-                options = (SettingsRepository.MIN_CONCURRENT..SettingsRepository.MAX_CONCURRENT).toList(),
-                selected = s.maxConcurrent,
-                label = { it.toString() },
-                onSelect = { vm.setMaxConcurrent(it) },
-                modifier = Modifier.testTag("concurrency"),
-            )
-            Spacer(Modifier.height(16.dp))
-            Label(stringResource(R.string.settings_piece_size))
-            SegmentedControl(
-                options = SettingsRepository.ALLOWED_CHUNK_SIZES,
-                selected = s.uploadChunkSizeBytes,
-                label = {
-                    stringResource(
-                        when (it) {
-                            MIB -> R.string.settings_piece_1
-                            2 * MIB -> R.string.settings_piece_2
-                            else -> R.string.settings_piece_5
-                        },
-                    )
-                },
-                onSelect = { vm.setPieceSize(it) },
-            )
-            Text(stringResource(R.string.settings_piece_helper), style = Neutral.type.meta)
-            Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                Label(stringResource(R.string.settings_auto_retry), Modifier.weight(1f))
-                Switch(
-                    checked = s.autoRetryEnabled,
-                    onCheckedChange = { vm.setAutoRetry(it) },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = Neutral.colors.inkPrimary,
-                        checkedThumbColor = Neutral.colors.white,
-                        uncheckedTrackColor = Neutral.colors.pill,
-                        uncheckedThumbColor = Neutral.colors.inkTertiary,
-                        uncheckedBorderColor = Neutral.colors.border,
-                    ),
+            Section(stringResource(R.string.settings_section_server)) { ServerCard(vm, s.serverUrl) }
+            Section(stringResource(R.string.settings_section_transfers), Modifier.bringIntoViewRequester(transfersSection)) {
+                Label(stringResource(R.string.settings_concurrency))
+                SegmentedControl(
+                    options = (SettingsRepository.MIN_CONCURRENT..SettingsRepository.MAX_CONCURRENT).toList(),
+                    selected = s.maxConcurrent,
+                    label = { it.toString() },
+                    onSelect = { vm.setMaxConcurrent(it) },
+                    modifier = Modifier.testTag("concurrency"),
                 )
+                Spacer(Modifier.height(16.dp))
+                Label(stringResource(R.string.settings_piece_size))
+                SegmentedControl(
+                    options = SettingsRepository.ALLOWED_CHUNK_SIZES,
+                    selected = s.uploadChunkSizeBytes,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                MIB -> R.string.settings_piece_1
+                                2 * MIB -> R.string.settings_piece_2
+                                else -> R.string.settings_piece_5
+                            },
+                        )
+                    },
+                    onSelect = { vm.setPieceSize(it) },
+                )
+                Text(stringResource(R.string.settings_piece_helper), style = Neutral.type.meta)
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Label(stringResource(R.string.settings_auto_retry), Modifier.weight(1f))
+                    Switch(
+                        checked = s.autoRetryEnabled,
+                        onCheckedChange = { vm.setAutoRetry(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = Neutral.colors.inkPrimary,
+                            checkedThumbColor = Neutral.colors.white,
+                            uncheckedTrackColor = Neutral.colors.pill,
+                            uncheckedThumbColor = Neutral.colors.inkTertiary,
+                            uncheckedBorderColor = Neutral.colors.border,
+                        ),
+                    )
+                }
+                Text(stringResource(R.string.settings_auto_retry_helper), style = Neutral.type.meta)
             }
-            Text(stringResource(R.string.settings_auto_retry_helper), style = Neutral.type.meta)
+            Section(stringResource(R.string.settings_section_simulator)) { SimulatorCard(vm) }
+            Section(stringResource(R.string.settings_section_about)) { AboutCard(onShowIntro, onOpenLicences) }
         }
-        Section(stringResource(R.string.settings_section_simulator)) { SimulatorCard(vm) }
-        Section(stringResource(R.string.settings_section_about)) { AboutCard(onShowIntro, onOpenLicences) }
+        StatusBarScrim(Neutral.colors.page)
     }
 }
 

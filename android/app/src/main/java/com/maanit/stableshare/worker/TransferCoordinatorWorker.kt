@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 /**
  * Thin WorkManager wrapper around [TransferEngine.run] (DESIGN.md §6). It runs as a dataSync
  * foreground service when the platform allows it, refreshing the notification at most once a
- * second; if the foreground start is refused, the work still runs.
+ * second; if the foreground start is refused, the work still runs and the promotion is retried
+ * (see [ForegroundPromoter]).
  */
 class TransferCoordinatorWorker(
     context: Context,
@@ -31,8 +32,9 @@ class TransferCoordinatorWorker(
     @OptIn(FlowPreview::class)
     override suspend fun doWork(): Result = coroutineScope {
         val updates = launch {
-            if (!promote(CoordinatorStatus(0, 0, 0))) return@launch
-            engine.status().sample(NOTIFICATION_INTERVAL_MS).collect { promote(it) }
+            val promoter = ForegroundPromoter(::promote)
+            promoter.update(CoordinatorStatus(0, 0, 0))
+            engine.status().sample(NOTIFICATION_INTERVAL_MS).collect { promoter.update(it) }
         }
         try {
             engine.run(stopReason = { describeStopReason(stopReason) })

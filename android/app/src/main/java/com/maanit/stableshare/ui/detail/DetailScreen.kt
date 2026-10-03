@@ -61,6 +61,7 @@ import com.maanit.stableshare.ui.components.CancelTransferDialog
 import com.maanit.stableshare.ui.components.MAX_TRIES
 import com.maanit.stableshare.ui.components.MintButton
 import com.maanit.stableshare.ui.components.MintButtonKind
+import com.maanit.stableshare.ui.components.StatusBarScrim
 import com.maanit.stableshare.ui.components.progressStateDescription
 import com.maanit.stableshare.ui.model.Format
 import com.maanit.stableshare.ui.model.StatePresentation
@@ -140,6 +141,7 @@ private fun Detail(ui: DetailUi, onBack: () -> Unit, perform: (TransferAction) -
             Spacer(Modifier.height(24.dp))
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
+        StatusBarScrim(Mint.colors.bg)
     }
     if (confirmCancel) {
         CancelTransferDialog(

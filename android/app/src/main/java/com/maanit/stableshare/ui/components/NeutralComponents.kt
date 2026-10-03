@@ -10,6 +10,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -261,4 +265,19 @@ fun NeutralSnackbarHost(state: SnackbarHostState, modifier: Modifier = Modifier)
             data.visuals.actionLabel?.let { NeutralTextButton(it, onClick = data::performAction, color = c.accent) }
         }
     }
+}
+
+/**
+ * Edge to edge, the system bars draw over the page colour (UI-SPEC §5.3): scrolling content must
+ * not show through the status bar, so screens that scroll under it place this on top.
+ */
+@Composable
+fun BoxScope.StatusBarScrim(color: Color) {
+    Box(
+        Modifier
+            .align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .windowInsetsTopHeight(WindowInsets.statusBars)
+            .background(color),
+    )
 }
