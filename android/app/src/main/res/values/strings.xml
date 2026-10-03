@@ -1,3 +1,361 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Every string comes from docs/UI-SPEC.md (sections 4–8); wording is exact. -->
 <resources>
-    <string name="app_name">StableShare</string>
+    <string name="app_name" translatable="false">StableShare</string>
+
+    <!-- §4.2 Mascot -->
+    <string name="mascot_description">StableShare cloud, %1$s</string>
+    <string name="mascot_idle">waving hello</string>
+    <string name="mascot_focused">concentrating</string>
+    <string name="mascot_worried">worried, trying again</string>
+    <string name="mascot_searching">looking for a connection</string>
+    <string name="mascot_sleepy">asleep, transfer paused</string>
+    <string name="mascot_sad">sad, transfer failed</string>
+    <string name="mascot_happy">smiling, transfer complete</string>
+    <string name="mascot_calm">resting, transfer cancelled</string>
+
+    <!-- §5.1 Splash -->
+    <string name="splash_wordmark" translatable="false">StableShare</string>
+    <string name="splash_tagline">Big files, landed safely.</string>
+
+    <!-- §5.2 Onboarding -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_get_started">Get started</string>
+    <string name="onboarding_title_1">Send big files, calmly</string>
+    <string name="onboarding_helper_1">StableShare moves large files in small pieces, so a dropped connection never costs you the whole file.</string>
+    <string name="onboarding_title_2">Stop anytime, pick up where you left off</string>
+    <string name="onboarding_helper_2">Pause, close the app or lose signal. Your progress is saved piece by piece.</string>
+    <string name="onboarding_title_3">Every file is checked</string>
+    <string name="onboarding_helper_3">A transfer only shows Completed after the whole file is verified.</string>
+
+    <!-- §5.3 App shell -->
+    <string name="nav_transfers">Transfers</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Accessibility labels for icon-only controls (approved additions, §10) -->
+    <string name="cd_back">Back</string>
+    <string name="cd_more_options">More options</string>
+    <string name="cd_copy">Copy %1$s</string>
+    <string name="cd_open_transfer_settings">Open transfer settings</string>
+    <string name="state_expanded">Expanded</string>
+    <string name="state_collapsed">Collapsed</string>
+
+    <!-- §5.4 Transfers -->
+    <string name="transfers_title">Transfers</string>
+    <string name="transfers_summary">%1$d active, %2$d waiting</string>
+    <string name="transfers_summary_speed">%1$d active, %2$d waiting, %3$s</string>
+    <string name="transfers_idle">Nothing moving right now</string>
+    <string name="limit_pill_label">Limit</string>
+    <string name="banner_offline">You\'re offline. Transfers will continue when you reconnect.</string>
+    <string name="banner_server_unreachable">Can\'t reach the server at %1$s.</string>
+    <string name="banner_server_action">Settings</string>
+    <string name="section_active">Active</string>
+    <string name="section_waiting">Waiting</string>
+    <string name="section_attention">Needs attention</string>
+
+    <!-- §5.4.1 Transfer row -->
+    <string name="row_size_progress">%1$s of %2$s</string>
+    <string name="row_live">%1$s, %2$s left</string>
+    <string name="row_restored">Restored after restart</string>
+    <string name="cd_pause">Pause %1$s</string>
+    <string name="cd_resume">Resume %1$s</string>
+    <string name="cd_retry">Retry %1$s</string>
+    <string name="cd_cancel">Cancel %1$s</string>
+    <string name="cancel_dialog_title">Cancel this transfer?</string>
+    <string name="cancel_dialog_body">%1$s will stop and its partial data will be deleted. This can\'t be undone.</string>
+    <string name="cancel_dialog_keep">Keep going</string>
+    <string name="cancel_dialog_confirm">Cancel transfer</string>
+    <string name="file_tag_none" translatable="false">FILE</string>
+    <string name="file_tag_generated" translatable="false">BIN</string>
+
+    <!-- §5.4.3 Empty state -->
+    <string name="empty_title">Nothing in the air</string>
+    <string name="empty_body">Upload a file from your phone or grab one from the server.</string>
+    <string name="empty_upload">Upload</string>
+    <string name="empty_download">Download</string>
+
+    <!-- §5.4.4 FAB and chooser -->
+    <string name="fab_new_transfer">New transfer</string>
+    <string name="chooser_title">New transfer</string>
+    <string name="chooser_upload_title">Upload a file</string>
+    <string name="chooser_upload_subtitle">Send a file from this phone, or a test file, to the server</string>
+    <string name="chooser_download_title">Download from server</string>
+    <string name="chooser_download_subtitle">Save one of the server\'s files to this phone</string>
+
+    <!-- §5.6 Upload (hoop) -->
+    <string name="upload_title">Upload files</string>
+    <string name="upload_subtitle">Pick a file, then take the shot.</string>
+    <string name="upload_in_queue">In queue</string>
+    <string name="drop_zone_empty_title">Choose a file</string>
+    <string name="drop_zone_empty_sub">Tap to browse your phone</string>
+    <string name="drop_zone_ready_title">Ready when you are</string>
+    <string name="drop_zone_ready_sub">Tap Upload to take the shot</string>
+    <string name="test_files_label">Or use a test file</string>
+    <string name="test_file_50">50 MB</string>
+    <string name="test_file_200">200 MB</string>
+    <string name="test_file_500">500 MB</string>
+    <string name="test_file_1024">1 GB</string>
+    <string name="launch_pad_empty">No file yet</string>
+    <string name="launch_pad_generating">Generating test file, %1$d%%</string>
+    <string name="upload_button">Upload</string>
+    <string name="upload_plus_one" translatable="false">+1</string>
+    <string name="couldnt_add">Couldn\'t add %1$s. %2$s</string>
+
+    <!-- §5.7 Download sheet -->
+    <string name="download_sheet_title">Download from server</string>
+    <string name="download_sheet_subtitle">Files on %1$s</string>
+    <string name="download_action">Download</string>
+    <string name="download_added">Added</string>
+    <string name="download_in_progress">In progress</string>
+    <string name="download_error_title">Can\'t reach the server</string>
+    <string name="download_try_again">Try again</string>
+    <string name="download_open_settings">Open settings</string>
+    <string name="download_empty">The server has no files yet. Run npm run seed on your computer.</string>
+
+    <!-- §5.8 Transfer detail -->
+    <string name="detail_file_line">%1$s, %2$s</string>
+    <string name="detail_of_total">of %1$s</string>
+    <string name="menu_open_file">Open file</string>
+    <string name="menu_share_file">Share file</string>
+    <string name="menu_remove_from_history">Remove from history</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_done">Done</string>
+    <string name="action_open">Open</string>
+    <string name="pieces_title">Pieces</string>
+    <plurals name="pieces_summary">
+        <item quantity="one">%1$d of %2$d piece done</item>
+        <item quantity="other">%1$d of %2$d pieces done</item>
+    </plurals>
+    <string name="pieces_failed_suffix">, %1$d failed</string>
+    <string name="pieces_none">This file has no pieces to send.</string>
+    <string name="legend_done">Done</string>
+    <string name="legend_waiting">Waiting</string>
+    <string name="legend_moving">Moving</string>
+    <string name="legend_failed">Failed</string>
+    <string name="activity_title">Activity</string>
+    <string name="activity_show_all">Show all (%1$d)</string>
+    <string name="details_title">Details</string>
+    <string name="details_direction">Direction</string>
+    <string name="details_direction_upload">Upload to server</string>
+    <string name="details_direction_download">Download from server</string>
+    <string name="details_size">Size</string>
+    <string name="details_size_bytes">%1$s bytes</string>
+    <string name="details_pieces">Pieces</string>
+    <string name="details_pieces_value">%1$d × %2$s</string>
+    <string name="details_transfer_id">Transfer ID</string>
+    <string name="details_server_id">Server ID</string>
+    <string name="details_saved_to">Saved to</string>
+    <string name="details_picked_file">Picked file</string>
+    <string name="details_generated_file">Generated test file</string>
+    <string name="details_expected_sha">Expected SHA-256</string>
+    <string name="details_verified_sha">Verified SHA-256</string>
+    <string name="details_not_yet">Not yet</string>
+    <string name="details_etag">ETag</string>
+    <string name="details_attempts">Attempts</string>
+    <string name="details_started">Started</string>
+    <string name="details_finished">Finished</string>
+    <string name="details_duration">Duration</string>
+    <string name="details_average_speed">Average speed</string>
+    <string name="copied">Copied</string>
+
+    <!-- §5.9 History -->
+    <string name="history_title">History</string>
+    <string name="history_clear_all">Clear all</string>
+    <string name="history_clear_title">Clear history?</string>
+    <string name="history_clear_body">This removes finished and cancelled transfers from the list. Downloaded files stay on your phone.</string>
+    <string name="history_clear_keep">Keep</string>
+    <string name="history_clear_confirm">Clear</string>
+    <string name="history_filter_all">All</string>
+    <string name="history_filter_completed">Completed</string>
+    <string name="history_filter_cancelled">Cancelled</string>
+    <string name="history_line">%1$s, took %2$s, averaged %3$s</string>
+    <string name="history_verified">Verified</string>
+    <string name="history_cancelled">Cancelled</string>
+    <string name="history_hash">%1$s…%2$s</string>
+    <string name="history_empty_title">No finished transfers yet</string>
+    <string name="history_empty_body">Completed and cancelled transfers will show up here.</string>
+
+    <!-- §5.10 Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_server">Server</string>
+    <string name="settings_section_transfers">Transfers</string>
+    <string name="settings_section_simulator">Network simulator</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_server_address">Server address</string>
+    <string name="settings_server_invalid">Enter a full address, like http://10.0.2.2:8080</string>
+    <string name="settings_server_helper">Use http://10.0.2.2:8080 on the emulator. On a phone, use your computer\'s address on the same Wi-Fi.</string>
+    <string name="settings_test_connection">Test connection</string>
+    <string name="settings_checking">Checking…</string>
+    <string name="settings_connected">Connected</string>
+    <string name="settings_couldnt_connect">Couldn\'t connect: %1$s</string>
+    <string name="settings_concurrency">Transfers at the same time</string>
+    <string name="settings_piece_size">Piece size for new uploads</string>
+    <string name="settings_piece_1">1 MB</string>
+    <string name="settings_piece_2">2 MB</string>
+    <string name="settings_piece_5">5 MB</string>
+    <string name="settings_piece_helper">Applies to uploads you add from now on.</string>
+    <string name="settings_auto_retry">Retry automatically</string>
+    <string name="settings_auto_retry_helper">When off, a failed piece stops the transfer until you tap Retry.</string>
+    <string name="simulator_notice">Testing tool. These settings change how the server behaves for every device using it.</string>
+    <string name="preset_off">Off</string>
+    <string name="preset_slow">Slow network</string>
+    <string name="preset_flaky">Flaky Wi-Fi</string>
+    <string name="preset_lost">Lost responses</string>
+    <string name="preset_corruption">Corruption</string>
+    <string name="preset_chaos">Chaos</string>
+    <string name="simulator_advanced">Advanced</string>
+    <string name="slider_latency">Latency</string>
+    <string name="slider_jitter">Jitter</string>
+    <string name="slider_bandwidth">Bandwidth</string>
+    <string name="slider_error_rate">Error rate</string>
+    <string name="slider_timeout_rate">Timeout rate</string>
+    <string name="slider_drop_mid_rate">Mid-transfer drop rate</string>
+    <string name="slider_lost_response_rate">Lost response rate</string>
+    <string name="slider_corruption_rate">Corruption rate</string>
+    <string name="value_ms">%1$d ms</string>
+    <string name="value_kbps">%1$d kbps</string>
+    <string name="value_unlimited">Unlimited</string>
+    <string name="value_percent">%1$d%%</string>
+    <string name="simulator_apply">Apply</string>
+    <string name="simulator_reset">Reset</string>
+    <string name="simulator_updated">Simulator updated</string>
+    <string name="simulator_was_reset">Simulator reset</string>
+    <string name="simulator_unreachable">Couldn\'t reach the server</string>
+    <string name="stats_requests">Requests</string>
+    <string name="stats_errors">Errors injected</string>
+    <string name="stats_timeouts">Timeouts injected</string>
+    <string name="stats_dropped">Dropped mid-transfer</string>
+    <string name="stats_lost">Responses lost</string>
+    <string name="stats_corrupted">Bytes corrupted</string>
+    <string name="stats_duplicates">Duplicate pieces ignored</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_source">Source code on GitHub</string>
+    <string name="about_source_url" translatable="false">https://github.com/maanit-gupta/StableShare</string>
+    <string name="about_intro">Show the intro again</string>
+    <string name="about_licences">Open-source licences</string>
+    <string name="licences_title">Open-source licences</string>
+    <string name="licence_comfortaa" translatable="false">Comfortaa</string>
+    <string name="licence_inter" translatable="false">Inter</string>
+
+    <!-- §5.12 Notifications -->
+    <string name="channel_transfers">Transfers in progress</string>
+    <string name="channel_results">Finished transfers</string>
+    <plurals name="notif_moving">
+        <item quantity="one">Moving %1$d file</item>
+        <item quantity="other">Moving %1$d files</item>
+    </plurals>
+    <string name="notif_overall_speed">%1$d%% overall, %2$s</string>
+    <string name="notif_overall">%1$d%% overall</string>
+    <string name="notif_upload_complete">Upload complete</string>
+    <string name="notif_download_complete">Download complete</string>
+    <string name="notif_verified">%1$s was verified.</string>
+    <string name="notif_upload_failed">Upload failed</string>
+    <string name="notif_download_failed">Download failed</string>
+    <string name="notif_failed_text">%1$s: %2$s. Tap to see options.</string>
+
+    <!-- §6 State presentation: list labels -->
+    <string name="label_queued">Waiting, #%1$d in line</string>
+    <string name="label_preparing">Preparing, %1$d%%</string>
+    <string name="label_uploading">Uploading…</string>
+    <string name="label_downloading">Downloading…</string>
+    <string name="label_verifying">Verifying…</string>
+    <string name="label_retrying">Retrying in %1$d s</string>
+    <string name="label_waiting_network">Waiting for network</string>
+    <string name="label_paused">Paused</string>
+    <string name="label_failed">Failed: %1$s</string>
+    <string name="label_uploaded">Uploaded</string>
+    <string name="label_downloaded">Downloaded</string>
+    <string name="label_cancelled">Cancelled</string>
+
+    <!-- §6 State presentation: detail titles (a trailing "..." animates) -->
+    <string name="title_queued">Waiting in line</string>
+    <string name="title_preparing">Getting ready...</string>
+    <string name="title_uploading">Uploading...</string>
+    <string name="title_downloading">Downloading...</string>
+    <string name="title_verifying">Checking...</string>
+    <string name="title_retrying">Trying again...</string>
+    <string name="title_waiting_network">Waiting for signal</string>
+    <string name="title_paused">Paused</string>
+    <string name="title_failed">Something went wrong</string>
+    <string name="title_completed">Completed</string>
+    <string name="title_cancelled">Cancelled</string>
+
+    <!-- §6 State presentation: detail stats lines -->
+    <string name="stats_queued">#%1$d in line. Up to %2$d move at once.</string>
+    <string name="stats_preparing">Calculating the file\'s checksum, %1$d%%</string>
+    <string name="stats_transferring">%1$s, about %2$s left</string>
+    <string name="stats_starting">Starting…</string>
+    <string name="stats_verifying">Making sure every byte matches</string>
+    <string name="stats_retrying">Attempt %1$d of %2$d. Next try in %3$d s.</string>
+    <string name="stats_waiting_network">This continues on its own when you\'re back online.</string>
+    <plurals name="stats_paused">
+        <item quantity="one">Progress saved: %1$d of %2$d piece.</item>
+        <item quantity="other">Progress saved: %1$d of %2$d pieces.</item>
+    </plurals>
+    <string name="stats_completed">Verified. The SHA-256 checksum matches.</string>
+    <string name="stats_cancelled">Partial data was deleted.</string>
+
+    <!-- §7 Error copy: short reasons -->
+    <string name="err_short_network_unavailable">No connection</string>
+    <string name="err_short_timeout">Server too slow</string>
+    <string name="err_short_connection_lost">Connection dropped</string>
+    <string name="err_short_server_error">Server error</string>
+    <string name="err_short_rate_limited">Server busy</string>
+    <string name="err_short_session_not_found">Upload expired</string>
+    <string name="err_short_session_conflict">Server mismatch</string>
+    <string name="err_short_chunk_hash_mismatch">Piece damaged</string>
+    <string name="err_short_file_hash_mismatch">Checksum didn\'t match</string>
+    <string name="err_short_remote_file_changed">File changed on server</string>
+    <string name="err_short_source_changed">File was edited</string>
+    <string name="err_short_source_missing">File not found</string>
+    <string name="err_short_disk_full">Storage full</string>
+    <plurals name="err_short_retries_exhausted">
+        <item quantity="one">Gave up after %1$d try</item>
+        <item quantity="other">Gave up after %1$d tries</item>
+    </plurals>
+    <string name="err_short_unknown">Unexpected error</string>
+
+    <!-- §7 Error copy: long reasons -->
+    <string name="err_long_network_unavailable">You\'re offline. This continues on its own when you\'re back online.</string>
+    <string name="err_long_timeout">The server took too long to answer. Tap Retry to continue from where it stopped.</string>
+    <string name="err_long_connection_lost">The connection dropped mid-transfer. Tap Retry to continue from where it stopped.</string>
+    <string name="err_long_server_error">The server had a temporary problem. Tap Retry to continue.</string>
+    <string name="err_long_rate_limited">The server asked StableShare to slow down. Tap Retry in a moment.</string>
+    <string name="err_long_session_not_found">The server no longer has this upload. Tap Retry to start a fresh one.</string>
+    <string name="err_long_session_conflict">The server has a different version of this upload. Cancel it and upload the file again.</string>
+    <string name="err_long_chunk_hash_mismatch">A piece kept arriving damaged. Tap Retry to fetch it again.</string>
+    <string name="err_long_file_hash_mismatch">The finished file didn\'t match its checksum, so it wasn\'t marked complete. Tap Retry to repair it.</string>
+    <string name="err_long_remote_file_changed">The server\'s copy changed during the download. Cancel and download it again.</string>
+    <string name="err_long_source_changed">The original file changed after the upload started. Cancel and upload it again.</string>
+    <string name="err_long_source_missing">The original file was moved or deleted. Cancel this upload.</string>
+    <string name="err_long_disk_full">Your phone ran out of space. Free some up, then tap Retry.</string>
+    <plurals name="err_long_retries_exhausted">
+        <item quantity="one">StableShare tried %1$d time. Check the server, then tap Retry. Finished pieces are kept.</item>
+        <item quantity="other">StableShare tried %1$d times. Check the server, then tap Retry. Finished pieces are kept.</item>
+    </plurals>
+    <string name="err_long_unknown">Something unexpected stopped this transfer. Tap Retry to continue.</string>
+
+    <!-- §8 Activity copy -->
+    <string name="act_added">Added to the queue</string>
+    <string name="act_retry_requested">Retry requested</string>
+    <string name="act_resumed">Resumed</string>
+    <string name="act_started">Started moving</string>
+    <string name="act_paused">Paused</string>
+    <string name="act_verifying">Checking the finished file</string>
+    <string name="act_problem">Hit a problem: %1$s</string>
+    <string name="act_stopped">Stopped: %1$s</string>
+    <string name="act_completed">Completed</string>
+    <string name="act_cancelled">Cancelled</string>
+    <string name="act_pieces_done">Pieces %1$d–%2$d done</string>
+    <string name="act_piece_done">Piece %1$d done</string>
+    <string name="act_piece_failed">Piece %1$d failed: %2$s</string>
+    <string name="act_piece_confirmed">Piece %1$d confirmed by the server after a lost reply</string>
+    <string name="act_retry_scheduled">Trying again in %1$d s (attempt %2$d of %3$d)</string>
+    <string name="act_verified">Checksum verified</string>
+    <string name="act_restored">Restored after the app restarted</string>
 </resources>

@@ -4,7 +4,7 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -23,10 +23,10 @@ object Motion {
     const val STANDARD_MS = 250
     const val LONG_MS = 600
 
-    fun <T> quick(): AnimationSpec<T> = tween(QUICK_MS, easing = FastOutSlowInEasing)
-    fun <T> standard(): AnimationSpec<T> = tween(STANDARD_MS, easing = FastOutSlowInEasing)
-    fun <T> emphasis(): AnimationSpec<T> = spring(dampingRatio = 0.7f, stiffness = 300f)
-    fun <T> long(): AnimationSpec<T> = tween(LONG_MS, easing = FastOutSlowInEasing)
+    fun <T> quick(): FiniteAnimationSpec<T> = tween(QUICK_MS, easing = FastOutSlowInEasing)
+    fun <T> standard(): FiniteAnimationSpec<T> = tween(STANDARD_MS, easing = FastOutSlowInEasing)
+    fun <T> emphasis(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.7f, stiffness = 300f)
+    fun <T> long(): FiniteAnimationSpec<T> = tween(LONG_MS, easing = FastOutSlowInEasing)
 }
 
 /**
