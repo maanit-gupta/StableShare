@@ -28,6 +28,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maanit.stableshare.di.AppContainer
 import com.maanit.stableshare.ui.components.NeutralSnackbarHost
+import com.maanit.stableshare.ui.detail.DetailScreen
+import com.maanit.stableshare.ui.detail.DetailViewModel
 import com.maanit.stableshare.ui.nav.AppBottomBar
 import com.maanit.stableshare.ui.nav.Routes
 import com.maanit.stableshare.ui.onboarding.OnboardingScreen
@@ -156,6 +158,22 @@ fun StableShareRoot(
                 }
                 composable(Routes.TRANSFERS) {
                     TransfersRoute(container, navController)
+                }
+                composable(Routes.DETAIL, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                    val id = requireNotNull(entry.arguments?.getString("id"))
+                    val vm = appViewModel(key = "detail-$id") {
+                        DetailViewModel(
+                            id = id,
+                            repo = transferRepository,
+                            tracker = progressTracker,
+                            restored = transferEngine.restoredIds,
+                            settings = settingsRepository.settings,
+                            controller = transferController,
+                            isGenerated = { fileStore.isGeneratedFile(it.localUri) },
+                            appScope = applicationScope,
+                        )
+                    }
+                    DetailScreen(vm, onBack = { if (!navController.popBackStack()) openTransfers(clear = true) })
                 }
             }
         }

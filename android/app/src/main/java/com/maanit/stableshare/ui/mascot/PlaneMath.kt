@@ -6,12 +6,16 @@ import kotlin.math.sin
 
 /** Where the plane is drawn: its centre (px, in the parent's coordinates), rotationZ and alpha. */
 data class PlanePose(val x: Float, val y: Float, val rotation: Float, val alpha: Float = 1f) {
-    fun lerp(to: PlanePose, t: Float) = PlanePose(
-        x + (to.x - x) * t,
-        y + (to.y - y) * t,
-        rotation + (to.rotation - rotation) * t,
-        alpha + (to.alpha - alpha) * t,
-    )
+    /** Blends towards [to]; the rotation takes the shorter way round. */
+    fun lerp(to: PlanePose, t: Float): PlanePose {
+        val turn = ((to.rotation - rotation) % 360f + 540f) % 360f - 180f
+        return PlanePose(
+            x + (to.x - x) * t,
+            y + (to.y - y) * t,
+            rotation + turn * t,
+            alpha + (to.alpha - alpha) * t,
+        )
+    }
 }
 
 /**

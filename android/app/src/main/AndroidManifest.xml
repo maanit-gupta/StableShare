@@ -37,6 +37,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Finished downloads are opened and shared through content:// URIs. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- WorkManager's foreground service must declare the type the coordinator uses. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

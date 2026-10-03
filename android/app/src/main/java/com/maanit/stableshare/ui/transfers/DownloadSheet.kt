@@ -75,9 +75,12 @@ fun DownloadSheet(vm: DownloadSheetViewModel, onDismiss: () -> Unit, onOpenSetti
     LaunchedEffect(vm) { vm.failureMessages.collect { snackbar.showSnackbar(it.resolve(resources)) } }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
 
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // The sheet sizes itself to the skeleton first; re-expand once the real content is in.
+    LaunchedEffect(files) { if (files != ServerFiles.Loading && sheetState.isVisible) sheetState.expand() }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
         containerColor = Neutral.colors.card,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {

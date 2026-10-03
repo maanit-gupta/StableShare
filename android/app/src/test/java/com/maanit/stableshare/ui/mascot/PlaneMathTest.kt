@@ -52,4 +52,14 @@ class PlaneMathTest {
         assertEquals(perched.y, end.y, eps)
         assertEquals(0f, end.rotation, eps)
     }
+
+    @Test
+    fun blendingTurnsTheShortWayRound() {
+        val from = PlanePose(0f, 0f, rotation = 356f + 18.7f)
+        val to = PlanePose(10f, 10f, rotation = 0f)
+        val half = from.lerp(to, 0.5f)
+        // 374.7° is 14.7°: the short way to 0° is −14.7°, not a full backwards turn.
+        assertEquals(374.7f - 7.35f, half.rotation, eps)
+        assertEquals(5f, half.x, eps)
+    }
 }
