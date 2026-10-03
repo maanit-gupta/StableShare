@@ -32,7 +32,10 @@ import com.maanit.stableshare.ui.detail.DetailScreen
 import com.maanit.stableshare.ui.detail.DetailViewModel
 import com.maanit.stableshare.ui.history.HistoryScreen
 import com.maanit.stableshare.ui.history.HistoryViewModel
+import com.maanit.stableshare.ui.licences.LicencesScreen
 import com.maanit.stableshare.ui.nav.AppBottomBar
+import com.maanit.stableshare.ui.settings.SettingsScreen
+import com.maanit.stableshare.ui.settings.SettingsViewModel
 import com.maanit.stableshare.ui.nav.Routes
 import com.maanit.stableshare.ui.onboarding.OnboardingScreen
 import com.maanit.stableshare.ui.splash.SplashScreen
@@ -169,6 +172,36 @@ fun StableShareRoot(
                     }
                     HistoryScreen(vm, onOpenDetail = { navController.navigate(Routes.detail(it)) })
                 }
+                composable(
+                    Routes.SETTINGS,
+                    arguments = listOf(navArgument("section") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                ) { entry ->
+                    val vm = appViewModel {
+                        SettingsViewModel(
+                            settingsRepo = settingsRepository,
+                            health = { protocolClient.health().ok },
+                            getFaults = { protocolClient.getFaults() },
+                            putFaults = { protocolClient.putFaults(it) },
+                            resetFaults = { protocolClient.resetFaults() },
+                            getStats = { protocolClient.getStats() },
+                            classifier = errorClassifier,
+                        )
+                    }
+                    SettingsScreen(
+                        vm,
+                        scrollToTransfers = entry.arguments?.getString("section") == Routes.SECTION_TRANSFERS,
+                        onShowIntro = {
+                            scope.launch {
+                                container.settingsRepository.setOnboardingCompleted(false)
+                                withContext(Dispatchers.Main) {
+                                    navController.navigate(Routes.ONBOARDING) { popUpTo(0) { inclusive = true } }
+                                }
+                            }
+                        },
+                        onOpenLicences = { navController.navigate(Routes.LICENCES) },
+                    )
+                }
+                composable(Routes.LICENCES) { LicencesScreen(onBack = { navController.popBackStack() }) }
                 composable(Routes.UPLOAD) {
                     val vm = appViewModel {
                         UploadViewModel(
