@@ -64,7 +64,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 
 ## Phase tracker
 - [x] Phase 1 — DESIGN.md + mock server + CLI client (2026-10-03: 32 server tests green, chaos test passing)
-- [ ] Phase 2 — Android foundation (data/domain layer)
+- [x] Phase 2 — Android foundation (data/domain layer) (2026-10-03: 112 JVM unit tests green; health() verified from the API 37 emulator; branch phase-2-android-foundation)
 - [ ] Phase 3 — Transfer engine
 - [ ] Phase 4 — UI, README, release APK
 
@@ -78,7 +78,19 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-03 — /admin/faults/reset also zeroes /admin/stats; dropAfterProcess only applies to chunk PUT and complete — those are the only persisted-then-reply operations.
 - 2026-10-03 — CLI client state = JSON sidecars (<path>.stableshare-upload.json, <out>.stableshare-download.json + <out>.part); chaos test runs its own server on port 18080 — avoids clashing with a dev server on 8080.
 - 2026-10-03 — `server:CLAUDE.md` (macOS colon artefact) moved to server/CLAUDE.md.
+- 2026-10-03 — Android toolchain: AGP 9.4.1 built-in Kotlin 2.2.10, KSP 2.3.12, Room 2.8.5, OkHttp 5.5, kotlinx-serialization 1.11, DataStore 1.2.1, Robolectric 4.17 (sdk 36) for Room/FileStore tests; the test JVM gets `--add-exports java.base/jdk.internal.access` because Robolectric needs it on JDK 25.
+- 2026-10-03 — `transition()` takes an optional `expectedFrom` — a stopped worker's RETRYING→QUEUED must not un-pause a row the user paused meanwhile (PAUSED→QUEUED is legal).
+- 2026-10-03 — Reconciliation moves only TRANSFERRING/VERIFYING → QUEUED; RETRYING keeps nextRetryAt and is claimed by claimNextQueued when due (null = waiting for network, woken by the Phase 3 connectivity monitor). DESIGN §9 updated.
+- 2026-10-03 — ErrorCode is the 15-value enum; DESIGN's SESSION_EXPIRED/REMOTE_CHANGED/HASH_MISMATCH renamed to SESSION_NOT_FOUND/REMOTE_FILE_CHANGED/RETRIES_EXHAUSTED. 413/other 4xx/protocol violations → Fatal UNKNOWN; 416 and 404 FILE_NOT_FOUND → REMOTE_FILE_CHANGED; 400 INCOMPLETE_BODY = transport drop. Offline check applies to timeouts too.
+- 2026-10-03 — ConnectivityChecker needs INTERNET capability, not VALIDATED — a LAN-only network hosting the mock server never validates.
+- 2026-10-03 — Android 17 (API 37) blocks app traffic to private-range hosts (10.0.2.2, LAN) without runtime ACCESS_LOCAL_NETWORK; declared and requested at launch. Found during emulator verification (connects silently timed out).
+- 2026-10-03 — Part files are `<safeName>.<transferId>.part` in getExternalFilesDir(DOWNLOADS); finalize = Files.move without REPLACE_EXISTING, then " (n)" suffixes, so nothing is overwritten. file:// URIs (generated files) are read directly, content:// via ContentResolver/DocumentFile.
+- 2026-10-03 — allowBackup=false: a restored transfer DB without its part files/URI grants would be inconsistent.
 
 ## Open issues (append; remove when resolved)
 - Disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem); Android-side DISK_FULL lands in Phase 3.
-- Not yet pushed to the GitHub remote (origin is configured).
+- Not yet pushed to the GitHub remote (origin is configured). Phase 2 lives on branch phase-2-android-foundation (not merged to main).
+- content:// source reads (SAF, persisted grants) have no automated test — Robolectric has no document provider; cover with an instrumented test in Phase 3.
+- Phase 3 must request/handle ACCESS_LOCAL_NETWORK denial (transfers would otherwise just time out as CONNECTION_LOST); the placeholder only requests it.
+- Placeholder's first health check can fire before the permission dialog is answered (it then times out once; the post-grant re-check succeeds).
+- No instrumented (connectedDebugAndroidTest) tests yet; the template ones were removed.

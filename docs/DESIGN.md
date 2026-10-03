@@ -92,13 +92,13 @@ flowchart LR
 
 Responsibilities:
 - **Compose UI and ViewModels** never write to the database directly. User intents (start, pause, resume, cancel, retry) become `TransferRepository` calls.
-- **TransferRepository** is the only writer of `transfers.state`. Its `transition(id, expected, next, reason)` runs a compare-and-set:
+- **TransferRepository** is the only writer of `transfers.state`. Its `transition(id, to, errorCode?, errorMessage?, nextRetryAt?, expectedFrom?)` reads the current state inside a transaction and runs a compare-and-set:
 
   ```sql
   UPDATE transfers SET state = :next … WHERE id = :id AND state = :expected
   ```
 
-  The update only runs after `StateMachine.isAllowed(expected, next)`. The same transaction also appends a `transfer_events` row. If 0 rows are updated, the caller loses the race and must re-read.
+  The update only runs after `StateMachine.canTransition(current, next)` (and, when the caller passes `expectedFrom`, only if the current state equals it). The same transaction also appends a `transfer_events` row. It returns `false` if the transition is illegal or 0 rows were updated; the caller lost the race and must re-read.
 - **TransferCoordinatorWorker** is a single unique WorkManager worker that runs as a foreground service. It picks up QUEUED transfers and runs at most *N* pipelines at once.
 - **Pipelines** carry out the protocol in §3. They own retries (§7) and write progress only while their transfer is TRANSFERRING (rule 5).
 - **Server.** Every piece of metadata lives on disk and is written atomically (temp file → fsync → rename), so a restart loses nothing. The fault middleware sits only on `/api/*`.
@@ -109,6 +109,7 @@ Responsibilities:
 
 General conventions:
 - Base URL: `http://<host>:8080`. The emulator reaches the server at `http://10.0.2.2:8080`.
+- **Android client network setup.** Cleartext HTTP is allowed through `res/xml/network_security_config.xml` (`base-config cleartextTrafficPermitted="true"`). This is acceptable only because the server is a local mock; the URL is user-configurable (LAN IPs), so a domain allow-list would not work. On Android 17 (API 37) and later, traffic to private-range hosts such as 10.0.2.2 or a LAN server also needs the runtime `ACCESS_LOCAL_NETWORK` permission (NEARBY_DEVICES group). Without it, connects silently time out. The app requests it at launch.
 - JSON errors always have the shape `{"error": "CODE", "message": "human text", ...extra}`.
 - Hashes are lowercase hex SHA-256.
 - Each chunk of a file has a fixed `chunkSize`, except the last one, which may be shorter. The number of chunks is `totalChunks = ceil(fileSize / chunkSize)`, so a zero-byte file has 0 chunks. Chunk `i` covers `[i·chunkSize, min(fileSize, (i+1)·chunkSize))`.
@@ -208,7 +209,7 @@ If the session is already COMPLETED, the response is the same `200` with the sam
 Removes the session directory and any completed file. Returns `204` whether or not the session existed (400 for a non-UUID id).
 
 #### Session expiry
-Once an hour, a sweeper removes every non-COMPLETED session whose `updatedAt` (bumped on create and on each stored chunk) is more than 24 h old. It also removes stray `*.tmp` files older than 1 h. After that, the session's endpoints return `404 SESSION_NOT_FOUND`, which the client treats as fatal: `FAILED SESSION_EXPIRED`.
+Once an hour, a sweeper removes every non-COMPLETED session whose `updatedAt` (bumped on create and on each stored chunk) is more than 24 h old. It also removes stray `*.tmp` files older than 1 h. After that, the session's endpoints return `404 SESSION_NOT_FOUND`, which the client treats as fatal: `FAILED SESSION_NOT_FOUND`.
 
 ### 3.2 Downloads
 
@@ -393,37 +394,56 @@ storage/
 ```
 Every metadata write follows the same sequence: write `*.tmp`, fsync the file, `rename()` it, then fsync the directory. Bytes are always made durable before the metadata that refers to them.
 
-### 5.2 Android (Room). This is an outline, finalised in Phase 2.
+### 5.2 Android (Room), final schema (database version 1)
+`AppDatabase` (`stableshare.db`), schema exported to `android/app/schemas/…/1.json`. Enums are stored as their names (Room's built-in mapping). Every write goes through `TransferRepository`; DAO write methods are `internal`.
 
-**transfers**
+**transfers** (indices: `state`, `createdAt`)
 
-| column | notes |
-|---|---|
-| id (PK, text UUID) | for uploads it doubles as the server `uploadId` |
-| direction | UPLOAD / DOWNLOAD |
-| state | written **only** by `TransferRepository.transition()` |
-| displayName, sourceUri (upload), remoteFileId (download), localPath (download target) | |
-| totalBytes, chunkSize, totalChunks, expectedSha256 | |
-| sourceSize, sourceLastModified (upload) | used to detect a changed source |
-| remoteEtag (download) | sent as If-Range |
-| bytesDone, errorCode, errorMessage, retryAttempt, nextRetryAt | |
-| createdAt, updatedAt | |
+| column | type | notes |
+|---|---|---|
+| id | TEXT PK | UUID. For uploads it is also the server `uploadId`, generated and persisted before the first request |
+| type | TEXT | UPLOAD / DOWNLOAD |
+| fileName, fileSize, mimeType? | TEXT, INTEGER, TEXT | |
+| localUri | TEXT | upload: source URI (`content://` with a persisted read grant, or `file://` for generated files). Download: the per-transfer `.part` file, replaced by the final file URI after finalize |
+| remoteId? | TEXT | upload: the uploadId; download: the server `fileId` |
+| chunkSize, totalChunks | INTEGER | fixed at creation (settings changes affect new transfers only) |
+| sha256? | TEXT | expected full-file hash: computed from the source (upload), from the manifest (download) |
+| sourceLastModified? | INTEGER | upload: mtime when recorded; re-checked with the size before every chunk |
+| etag? | TEXT | download: manifest ETag, sent as `If-Range` |
+| state | TEXT | written **only** by `transition()` / `claimNextQueued()` / `reconcileAfterProcessStart()` |
+| bytesDone | INTEGER | `SUM(length)` of DONE chunks, recomputed in the same transaction as every chunk write |
+| errorCode?, errorMessage? | TEXT | set on RETRYING/FAILED; cleared on TRANSFERRING, COMPLETED and manual retry |
+| attemptCount | INTEGER | failures counted while active; reset by manual retry (FAILED → QUEUED) |
+| nextRetryAt? | INTEGER | RETRYING only. `null` while RETRYING means "waiting for network" |
+| sessionCreated | INTEGER (bool) | upload: create-session acknowledged |
+| createdAt, updatedAt, completedAt? | INTEGER | epoch ms |
 
-**chunks**
+**chunks** (PK `(transferId, index)`; FK `transferId → transfers.id ON DELETE CASCADE`)
 
-| column | notes |
-|---|---|
-| transferId (FK, cascade), index | composite PK |
-| offset, length, sha256 | |
-| status | PENDING / DONE |
-| attempts, updatedAt | |
+| column | type | notes |
+|---|---|---|
+| transferId, index | TEXT, INTEGER | `index` is quoted in SQL |
+| offset, length | INTEGER | from `ChunkPlanner`; download rows must match the manifest exactly |
+| sha256? | TEXT | download: manifest hash; upload: hash of the bytes sent, set when DONE |
+| status | TEXT | PENDING / DONE / FAILED |
+| attempts | INTEGER | failed attempts of this chunk (max 5, §7) |
+| lastError? | TEXT | |
 
-**transfer_events**
+**transfer_events** (index `transferId`; FK cascade)
 
-| column | notes |
-|---|---|
-| id (autoincrement) | |
-| transferId, at, fromState, toState, code, message | append-only audit log, used by the UI detail screen and in tests |
+| column | type | notes |
+|---|---|---|
+| id | INTEGER PK autoincrement | |
+| transferId, timestamp | TEXT, INTEGER | |
+| type | TEXT | STATE_CHANGE, CHUNK_DONE, CHUNK_FAILED, CHUNK_CONFIRMED_AFTER_LOST_RESPONSE, RETRY_SCHEDULED, VERIFIED, ERROR, INFO |
+| fromState?, toState?, chunkIndex? | | |
+| message | TEXT | append-only audit log for the detail screen and tests |
+
+**Repository operations.**
+- `createUpload` / `createDownload(manifest)`: the transfer row, all chunk rows (PENDING) and a STATE_CHANGE event in one transaction.
+- `claimNextQueued(limit)`: in one transaction, takes the oldest (`createdAt`, then `id`) rows that are QUEUED, or RETRYING with `nextRetryAt ≤ now`, and CASes each to TRANSFERRING. Room serialises write transactions, so concurrent claims never overlap.
+- `applyServerReceivedChunks(id, indices)` (listed → DONE, all others → PENDING) and `resetChunks` are allowed while TRANSFERRING or VERIFYING (the `MISSING_CHUNKS` re-sync happens in VERIFYING). Index lists are batched at 500 to stay under SQLite's 999-variable limit.
+- `deleteTransfer` succeeds only for COMPLETED/CANCELLED; chunks and events cascade.
 
 ### 5.3 Write ordering
 1. **Write the bytes, fsync, then update the DB. Never the reverse.**
@@ -438,7 +458,7 @@ Every metadata write follows the same sequence: write `*.tmp`, fsync the file, `
      AND (SELECT state FROM transfers WHERE id = :id) = 'TRANSFERRING'
    ```
 
-   A stale or cancelled job therefore writes nothing (rule 5).
+   A stale or cancelled job therefore writes nothing (rule 5). `markChunkDone` / `markChunkFailed` return `false` when the guard matched 0 rows, and log nothing.
 
 ---
 
@@ -451,6 +471,7 @@ Every metadata write follows the same sequence: write `*.tmp`, fsync the file, `
   4. Launch the pipeline coroutine.
 
   It stops when nothing is QUEUED, TRANSFERRING, RETRYING or VERIFYING.
+- A RETRYING row whose `nextRetryAt` has passed is also claimable (`claimNextQueued`), so a backoff persisted before a restart is honoured. If a pipeline is still waiting out that backoff in-process, both it and the coordinator try `RETRYING → TRANSFERRING`; the CAS lets exactly one win, and the loser exits without writing.
 - Changing *N* in Settings applies at the next slot acquisition. Running transfers are never pre-empted.
 - Inside one transfer, chunks are **sequential**. This keeps the write-ordering argument simple and bounds memory to one chunk buffer per transfer.
 - **Pause and cancel** are state transitions made from the UI thread through the repository. Each pipeline observes its row's state with a Flow:
@@ -472,6 +493,32 @@ OkHttp has `retryOnConnectionFailure = false`, so every retry is a deliberate de
 
 Special cases:
 - **409 `MISSING_CHUNKS`** on `complete` re-syncs from GET status and re-uploads the missing chunks. This is allowed at most twice, and after that it is FATAL.
+
+**Android mapping** (`ErrorClassifier.classify(Throwable) → Outcome`, codes from `ErrorCode`):
+
+| Input | Outcome |
+|---|---|
+| `CancellationException` | rethrown, never classified (pause/cancel) |
+| `DiskFullException` or any IOException carrying ENOSPC | Fatal `DISK_FULL` |
+| `SourceChangedException` / `SourceMissingException` | Fatal `SOURCE_CHANGED` / `SOURCE_MISSING` |
+| `RemoteFileChangedException` (200 instead of 206) | Fatal `REMOTE_FILE_CHANGED` |
+| `ProtocolViolationException` (bad Content-Range, undecodable body), `PartFileMissingException` | Fatal `UNKNOWN` |
+| `ChunkHashMismatchException` (download corrupted in transit) | Retryable `CHUNK_HASH_MISMATCH` |
+| HTTP 507 | Fatal `DISK_FULL` |
+| HTTP 5xx | Retryable `SERVER_ERROR` (+ `Retry-After`) |
+| HTTP 429 | Retryable `RATE_LIMITED` (+ `Retry-After`) |
+| HTTP 404 `SESSION_NOT_FOUND` / `FILE_NOT_FOUND` / other | Fatal `SESSION_NOT_FOUND` / `REMOTE_FILE_CHANGED` / `UNKNOWN` |
+| HTTP 409 (any code; `MISSING_CHUNKS` is intercepted by the pipeline first) | Fatal `SESSION_CONFLICT` |
+| HTTP 422 `CHUNK_HASH_MISMATCH` / `FILE_HASH_MISMATCH` | Retryable `CHUNK_HASH_MISMATCH` / Fatal `FILE_HASH_MISMATCH` |
+| HTTP 416 | Fatal `REMOTE_FILE_CHANGED` (the file shrank) |
+| HTTP 400 `INCOMPLETE_BODY` | treated as a transport drop (next row) |
+| HTTP 413, other 4xx | Fatal `UNKNOWN` (a client bug; retrying cannot help) |
+| any other IOException, **no network** (`ConnectivityChecker`) | WaitForNetwork (`NETWORK_UNAVAILABLE`, no attempt consumed) |
+| `SocketTimeoutException` / `InterruptedIOException`, online | Retryable `TIMEOUT` |
+| any other IOException, online | Retryable `CONNECTION_LOST` |
+| anything else | Fatal `UNKNOWN` |
+
+Connectivity is checked for timeouts too, so an offline timeout waits instead of burning attempts. `TIMEOUT` and `CONNECTION_LOST` are *ambiguous* (`Outcome.isAmbiguous`): before resending a chunk PUT or `complete`, the pipeline calls GET status (§8). When the 5 attempts of a chunk are used up, the transfer fails with `RETRIES_EXHAUSTED`. `ConnectivityChecker` requires an active network with the INTERNET capability but not VALIDATED, because a LAN-only network hosting the mock server never passes Android's internet validation.
 
 **Backoff**, full jitter, where `attempt` counts the failures of this chunk so far (1, 2, …):
 ```
@@ -510,12 +557,12 @@ delay(attempt) = random_uniform(0, min(30 s, 1 s × 2^(attempt−1)))
 | Situation | Behaviour |
 |---|---|
 | **Foreground / background** | Work runs in the coordinator's foreground service, not in the Activity, so leaving the app does not stop transfers. The UI only observes Room Flows. |
-| **Swipe-away from recents** | The process may be killed. The foreground service usually survives, and if it does not, WorkManager reschedules the unique work. On restart, reconciliation sets TRANSFERRING/VERIFYING/RETRYING → QUEUED and the transfer resumes from DONE chunks. |
+| **Swipe-away from recents** | The process may be killed. The foreground service usually survives, and if it does not, WorkManager reschedules the unique work. On restart, reconciliation sets TRANSFERRING/VERIFYING → QUEUED and the transfer resumes from DONE chunks. RETRYING rows keep their persisted backoff (§6). |
 | **Process death (OOM, crash)** | Same as swipe-away. Chunk progress was written only after fsync (§5.3), so resuming is exact. |
 | **Reboot** | WorkManager persists its jobs and re-enqueues them after boot through its own `RECEIVE_BOOT_COMPLETED` receiver. The coordinator starts, reconciles and resumes. |
-| **System stop** | WorkManager stops the worker: constraints unmet, quota, or a foreground-service timeout on Android 15 `dataSync`. `getStopReason()` is available on API 31+. In `onStopped`, every running pipeline is cancelled and its transfer goes `TRANSFERRING/VERIFYING/RETRYING → QUEUED` (code `SYSTEM_STOPPED`, which consumes no attempt). WorkManager re-runs the worker later. |
+| **System stop** | WorkManager stops the worker: constraints unmet, quota, or a foreground-service timeout on Android 15 `dataSync`. `getStopReason()` is available on API 31+. In `onStopped`, every running pipeline is cancelled and its transfer goes `TRANSFERRING/VERIFYING/RETRYING → QUEUED` with an INFO event "system stop" (no error code, no attempt consumed). WorkManager re-runs the worker later. |
 | **Force-stop (Settings → Force stop, or `adb shell am force-stop`)** | **Platform limitation.** Android cancels all jobs and alarms of a force-stopped app, and nothing may restart it until the user launches it again. Transfers simply stay in their persisted state. On the next launch, `Application.onCreate` enqueues the coordinator, and reconciliation resumes everything. This is documented and not worked around. |
-| **Restart reconciliation** | Runs at coordinator start, in one transaction. Rows in TRANSFERRING, VERIFYING or RETRYING go to QUEUED with event `RECONCILED`. QUEUED, PAUSED, FAILED, COMPLETED and CANCELLED are left untouched, so a **cancelled transfer is never revived** (rule 4). For downloads, DONE chunks are re-verified against their manifest hashes on disk before resuming (§10). For uploads, GET status overrides the local chunk table, because the server is the source of truth (rule 7). |
+| **Restart reconciliation** | `reconcileAfterProcessStart()` runs once per process, before the coordinator claims work, in one transaction. Rows in TRANSFERRING or VERIFYING go to QUEUED with a STATE_CHANGE and an INFO "Reconciled after process start" event. RETRYING rows are left as they are: one with `nextRetryAt` is claimed once that time passes, and one waiting for network (`nextRetryAt = null`) is moved RETRYING → QUEUED by the connectivity monitor (Phase 3). QUEUED, PAUSED, FAILED, COMPLETED and CANCELLED are left untouched, so a **cancelled transfer is never revived** (rule 4). For downloads, DONE chunks are re-verified against their manifest hashes on disk before resuming (§10). For uploads, GET status overrides the local chunk table, because the server is the source of truth (rule 7). |
 
 ---
 
@@ -531,8 +578,8 @@ delay(attempt) = random_uniform(0, min(30 s, 1 s × 2^(attempt−1)))
 - **Atomic renames.** On the server, chunk files, assembled files and every JSON metadata file follow temp → fsync → rename → fsync dir. On the client, `<target>.part` is renamed to `<target>` only after full verification.
 - **ETag and If-Range.**
   - The manifest carries `etag`, which the client stores, and every Range request sends `If-Range: <etag>`.
-  - If the remote file changed, the server returns `200` with the full body instead of `206`. The client treats that as `FAILED REMOTE_CHANGED` and does not consume the body.
-  - A manifest re-fetched on resume with a different etag is also `REMOTE_CHANGED`.
+  - If the remote file changed, the server returns `200` with the full body instead of `206`. The client treats that as `FAILED REMOTE_FILE_CHANGED` and does not consume the body.
+  - A manifest re-fetched on resume with a different etag is also `REMOTE_FILE_CHANGED`.
 - **Corrupted-partial recovery.** On resume, every DONE chunk of a download is re-hashed from the `.part` file. Any chunk that does not match goes back to PENDING and is downloaded again. This covers torn writes, external tampering and a lost fsync. A `.part` file that is missing or the wrong size resets all chunks.
 - **Source integrity (uploads).**
   - Before the session is created, the source is hashed, and `sourceSize` and `sourceLastModified` are recorded.
@@ -545,29 +592,29 @@ delay(attempt) = random_uniform(0, min(30 s, 1 s × 2^(attempt−1)))
 Where it is "Tested" by:
 - `server/test/*` is `npm test`.
 - `chaos` is `server/scripts/chaos-test.sh` running the CLI client, which implements the same client algorithm as the app.
-- Android tests are planned for Phases 2–3.
+- Android: JVM unit tests under `android/app/src/test` (`./gradlew testDebugUnitTest`); pipeline-level tests arrive in Phase 3.
 
 | # | Scenario | Expected behaviour | Where handled | How tested |
 |---|---|---|---|---|
 | 1 | Zero-byte file | Upload: `totalChunks 0`; `complete` succeeds right away with the empty-string hash. Download: manifest `chunks: []`; Range → 416, so the client skips the transfer and verifies the empty file. | `routes/uploads.js`, `routes/files.js`; pipelines | `uploads.test.js` "zero-byte upload"; `files.test.js` "416 for unsatisfiable, multi-range, zero-byte"; Phase 3 unit test |
-| 2 | Size not divisible by chunk size | Last chunk is shorter. The server expects exactly that length, and the manifest's last entry has the remainder. | `expectedChunkLength()` | `uploads.test.js` "odd-size last chunk"; `files.test.js` "manifest chunk hashes recompute correctly"; seed `sample-odd` |
+| 2 | Size not divisible by chunk size | Last chunk is shorter. The server expects exactly that length, and the manifest's last entry has the remainder. | `expectedChunkLength()` | `uploads.test.js` "odd-size last chunk"; `files.test.js` "manifest chunk hashes recompute correctly"; seed `sample-odd`; `ChunkPlannerTest` |
 | 3 | Duplicate chunk | `200 already_received`, file not rewritten (mtime unchanged), `dedupedChunks++` | chunk PUT | `uploads.test.js` "duplicate chunk" |
 | 4 | Wrong-hash chunk | `422 CHUNK_HASH_MISMATCH`, temp deleted, nothing recorded; the client retries (a consumed attempt) | chunk PUT | `uploads.test.js` "wrong hash rejected and not stored" |
 | 5 | Wrong-length chunk | `400 CHUNK_LENGTH_MISMATCH` (short) / `413 CHUNK_TOO_LARGE` (long); fatal for the client (bug) | chunk PUT | `uploads.test.js` "wrong length" |
 | 6 | Lost response after a chunk was processed | Client: GET status shows the chunk, so no resend; any resend gets `already_received` | §8; CLI `sendChunk` | `faults.test.js` "dropAfterProcess: socket destroyed, yet status lists the chunk…"; chaos (5 % dropAfterProcess) |
 | 7 | `complete` response lost | Client: GET status says COMPLETED with sha256, so the client verifies and completes. Calling `complete` again returns the same 200. | §8; `complete` idempotent | `uploads.test.js` "finalize idempotent"; `faults.test.js` "dropAfterProcess on complete"; chaos |
 | 8 | Server restart mid-transfer | All metadata is on disk. The client sees connection refused (WAITING), then GET status and resumes. | `storage.js` atomic writes | `uploads.test.js` "server restart keeps sessions and chunks" |
-| 9 | Session expired (24 h) | 404 `SESSION_NOT_FOUND` leads to `FAILED SESSION_EXPIRED`. Manual retry creates a new session id. | sweeper; client classification | `uploads.test.js` "sweeper expires idle sessions" |
-| 10 | Remote file changed mid-download | If-Range mismatch returns 200 instead of 206, giving `FAILED REMOTE_CHANGED`. A changed manifest etag on resume is the same failure. | content route; download pipeline | `files.test.js` "If-Range after the remote file changed"; CLI resume after `mutate` → `REMOTE_CHANGED` |
+| 9 | Session expired (24 h) | 404 `SESSION_NOT_FOUND` leads to `FAILED SESSION_NOT_FOUND`. Manual retry creates a new session id. | sweeper; client classification | `uploads.test.js` "sweeper expires idle sessions" |
+| 10 | Remote file changed mid-download | If-Range mismatch returns 200 instead of 206, giving `FAILED REMOTE_FILE_CHANGED` (the CLI prints `REMOTE_CHANGED`). A changed manifest etag on resume is the same failure. | content route; download pipeline | `files.test.js` "If-Range after the remote file changed"; CLI resume after `mutate` → `REMOTE_CHANGED` |
 | 11 | Source modified or deleted mid-upload | Size, mtime or hash check fails, giving `FAILED SOURCE_CHANGED` / `SOURCE_MISSING`. | upload pipeline / CLI resume check | CLI: upload killed, source edited, rerun → `FAILED SOURCE_CHANGED` (verified manually in Phase 1); Phase 3 instrumented test |
 | 12 | Disk full | Server: ENOSPC gives 507 `INSUFFICIENT_STORAGE`, which is fatal. Client: free space is checked before a download starts, and an ENOSPC during a write is `FAILED DISK_FULL`. | error handler; download pipeline | Phase 3 unit test with a fake file system |
-| 13 | Pause during chunk write | The in-flight call is cancelled. The partial chunk is never marked DONE, because the guarded write requires TRANSFERRING. Resume re-sends or re-downloads that chunk. | pipeline + guarded `UPDATE` | Phase 2 DAO test, Phase 3 pipeline test |
-| 14 | Cancel during chunk write | CAS → CANCELLED. The pipeline's later writes match 0 rows. Server `DELETE` / `.part` deleted. | repository + pipeline | Phase 2/3 tests; `DELETE` idempotent in `uploads.test.js` |
-| 15 | Cancel while RETRYING | `RETRYING → CANCELLED` wins the CAS. When the backoff wakes, its `RETRYING → TRANSFERRING` fails, so the pipeline exits. | StateMachine + CAS | Phase 2 StateMachine/repository tests |
+| 13 | Pause during chunk write | The in-flight call is cancelled. The partial chunk is never marked DONE, because the guarded write requires TRANSFERRING. Resume re-sends or re-downloads that chunk. | pipeline + guarded `UPDATE` | `TransferRepositoryTest` "markChunkDoneIgnoredUnlessTransferring"; Phase 3 pipeline test |
+| 14 | Cancel during chunk write | CAS → CANCELLED. The pipeline's later writes match 0 rows. Server `DELETE` / `.part` deleted. | repository + pipeline | `TransferRepositoryTest` "cancelledNeverMovesToPausedOrQueued"; `ProtocolClientTest` "coroutineCancellationCancelsTheCall"; `DELETE` idempotent in `uploads.test.js`; Phase 3 pipeline test |
+| 15 | Cancel while RETRYING | `RETRYING → CANCELLED` wins the CAS. When the backoff wakes, its `RETRYING → TRANSFERRING` fails, so the pipeline exits. | StateMachine + CAS | `StateMachineTest`; `TransferRepositoryTest` "expectedFromActsAsCompareAndSet" |
 | 16 | App killed during VERIFYING | Reconciliation sets `VERIFYING → QUEUED`. The re-run calls `complete` (idempotent) or re-hashes the `.part` file. | reconciliation; idempotent complete | `uploads.test.js` "finalize idempotent"; Phase 3 test |
 | 17 | Network flapping | Each loss is WAITING (no attempt consumed). Each return resumes from GET status / DONE chunks. Mid-body drops are RETRYABLE. | connectivity monitor; classification | chaos (dropMidBody, errors); Phase 3 test |
-| 18 | Same file transferred twice | Each transfer has its own uploadId and its own session, so two copies are stored. Downloads to the same target get distinct names (`name (1).bin`), so there are no shared `.part` files. | client id generation; target naming | `uploads.test.js` uses separate ids; Phase 3 test |
-| 19 | Download body corrupted in transit | The chunk hash does not match the manifest, so the chunk is retried (consumed attempt). After 5 failures: `FAILED HASH_MISMATCH`. | download pipeline / CLI | `faults.test.js` "corrupt: exactly one byte flipped"; chaos (2 % corrupt) |
+| 18 | Same file transferred twice | Each transfer has its own uploadId and its own session, so two copies are stored. Downloads to the same target get distinct names (`name (1).bin`), so there are no shared `.part` files. | client id generation; target naming | `uploads.test.js` uses separate ids; `FileStoreTest` "finalizeRenamesWithCollisionSuffixes", "twoTransfersOfTheSameFileGetDistinctPartFiles" |
+| 19 | Download body corrupted in transit | The chunk hash does not match the manifest, so the chunk is retried (consumed attempt). After 5 failures: `FAILED RETRIES_EXHAUSTED`. | download pipeline / CLI | `faults.test.js` "corrupt: exactly one byte flipped"; chaos (2 % corrupt) |
 | 20 | Request hangs forever | The client's read timeout fires, which is RETRYABLE and ambiguous. GET status follows before the resend. | OkHttp timeouts / CLI timeout | `faults.test.js` "timeout: request never answered and nothing persisted" |
 | 21 | Client killed mid-transfer and restarted | Resumes from the sidecar (CLI) or Room (app). Already-sent or already-written chunks are skipped after verification. | CLI sidecar; reconciliation | chaos (kill -9 and rerun for both directions) |
 | 22 | Crash between the chunk write and the DB update | Download: the chunk stays PENDING and is re-downloaded. Upload: GET status reports it. | write ordering §5.3 | chaos kill -9 |
