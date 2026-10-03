@@ -65,7 +65,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 ## Phase tracker
 - [x] Phase 1 — DESIGN.md + mock server + CLI client (2026-10-03: 32 server tests green, chaos test passing)
 - [x] Phase 2 — Android foundation (data/domain layer) (2026-10-03: 112 JVM unit tests green; health() verified from the API 37 emulator; branch phase-2-android-foundation)
-- [ ] Phase 3 — Transfer engine
+- [x] Phase 3 — Transfer engine (2026-10-03: 163 JVM unit tests green; emulator chaos run with kill -9 → both 200 MB transfers COMPLETED, hashes match; branch phase-3-transfer-engine)
 - [ ] Phase 4 — UI, README, release APK
 
 ## Decisions (append: date — decision — why)
@@ -87,10 +87,24 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-03 — Part files are `<safeName>.<transferId>.part` in getExternalFilesDir(DOWNLOADS); finalize = Files.move without REPLACE_EXISTING, then " (n)" suffixes, so nothing is overwritten. file:// URIs (generated files) are read directly, content:// via ContentResolver/DocumentFile.
 - 2026-10-03 — allowBackup=false: a restored transfer DB without its part files/URI grants would be inconsistent.
 
+- 2026-10-03 — Coordinator = unique work "transfer-coordinator", APPEND_OR_REPLACE (KEEP drops a request landing while the coordinator exits). In-process dedupe via TransferEngine.isAcceptingWork() (flag cleared before the final DB check), so running coordinators aren't chained needlessly. Expedited request; refused setForeground is logged and ignored.
+- 2026-10-03 — No state-machine change: verification setbacks (MISSING_CHUNKS, local full-file mismatch) go VERIFYING → RETRYING (nextRetryAt = now) → TRANSFERRING.
+- 2026-10-03 — claimNextQueued(limit, exclude): the coordinator never claims a RETRYING row its own job is backing off in-process. New repo ops promoteDueRetries/promoteWaitingForNetwork/setSourceInfo; all state writes still go through transitionLocked.
+- 2026-10-03 — Attempt budgets: chunk failures use persisted chunks.attempts; non-chunk steps (session, status, complete, local hash) an in-memory per-run counter (max 5). Lost-response confirmation consumes no attempt; the status check runs only if the whole body was written.
+- 2026-10-03 — Upload 404 SESSION_NOT_FOUND → reset + recreate the session once per run, second → FAILED (DESIGN §11 #9 updated).
+- 2026-10-03 — Download resume re-hashes only the last 2 DONE chunks; older damage is caught by the full-file check, which resets only bad chunks (DESIGN §10 updated). REMOTE_FILE_CHANGED keeps the .part until cancel.
+- 2026-10-03 — Cancel cleanup lives in TransferController (NonCancellable: stopJob → DELETE session / delete local file), so cancelling PAUSED/FAILED/QUEUED rows cleans up without a coordinator.
+- 2026-10-03 — ACCESS_LOCAL_NETWORK denied → ambiguous transport errors become FAILED UNKNOWN "Local network permission denied" (debug screen shows a banner + re-request).
+- 2026-10-03 — WorkManager on-demand init (Configuration.Provider + AppWorkerFactory); work-runtime/testing 2.12.0. TransferApi interface (data/net) lets tests use an in-memory FakeTransferServer; FileStore is `open` only for the disk-full test.
+- 2026-10-03 — Engine tests run under runTest (virtual time) while Room runs on its own threads, so virtual time can jump ahead while a query is pending; tests synchronise with gates/flows, never timestamps. Process death is simulated by freezing the engine's only thread.
+- 2026-10-03 — Chaos run: adb root unavailable (google_apis_playstore image); used `adb shell run-as com.maanit.stableshare kill -9 <pid>` (real SIGKILL from the app uid).
+
 ## Open issues (append; remove when resolved)
-- Disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem); Android-side DISK_FULL lands in Phase 3.
-- Not yet pushed to the GitHub remote (origin is configured). Phase 2 lives on branch phase-2-android-foundation (not merged to main).
-- content:// source reads (SAF, persisted grants) have no automated test — Robolectric has no document provider; cover with an instrumented test in Phase 3.
-- Phase 3 must request/handle ACCESS_LOCAL_NETWORK denial (transfers would otherwise just time out as CONNECTION_LOST); the placeholder only requests it.
-- Placeholder's first health check can fire before the permission dialog is answered (it then times out once; the post-grant re-check succeeds).
+- Server disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem). Android DISK_FULL is tested.
+- Not yet pushed to the GitHub remote (origin is configured). Phase 2 is on phase-2-android-foundation, Phase 3 on phase-3-transfer-engine (stacked; neither merged to main).
+- content:// source reads (SAF, persisted grants) have no automated test — Robolectric has no document provider; deferred to Phase 4 with the SAF picker (instrumented test).
+- Debug screen's first health check can fire before the permission dialog is answered (the post-grant refresh fixes it); Phase 4 UI should gate it.
 - No instrumented (connectedDebugAndroidTest) tests yet; the template ones were removed.
+- Crash between finalizePart and setLocalUri re-downloads the file (the verified copy is left orphaned); a cancel whose cleanup is cut short by process death leaves a server session (expires in 24 h) or a local file.
+- REMOTE_FILE_CHANGED manual retry reuses the stored ETag and fails again; Phase 4 should offer "download again" (new manifest).
+- After kill -9, resumption took ~18 s on API 37 (WorkManager stops its stale run on restart; the 15 s backstop wake-up / reschedule restarts it). Generated test files are never deleted.

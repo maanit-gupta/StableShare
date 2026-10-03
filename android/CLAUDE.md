@@ -10,7 +10,7 @@ Add dependencies only through gradle/libs.versions.toml, using current stable, m
 ./gradlew assembleRelease             (needs keystore.properties; never create a keystore yourself)
 
 ## Package structure (com.maanit.stableshare)
-data/db (entities, DAOs, converters, AppDatabase) · data/repo (TransferRepository) · data/net (ProtocolClient, DTOs, ErrorClassifier) · data/files (FileStore) · data/settings (SettingsRepository) · domain (TransferState, StateMachine, ChunkPlanner, RetryPolicy, models) · engine (TransferEngine, UploadPipeline, DownloadPipeline, TransferScheduler, TransferProgressTracker, ConnectivityMonitor) · worker (TransferCoordinatorWorker, thin wrapper) · di (AppContainer) · ui (screens, ViewModels, theme)
+data/db (entities, DAOs, converters, AppDatabase) · data/repo (TransferRepository) · data/net (TransferApi, ProtocolClient, DTOs, ErrorClassifier) · data/files (FileStore) · data/settings (SettingsRepository) · domain (TransferState, StateMachine, ChunkPlanner, RetryPolicy, models) · engine (TransferEngine, UploadPipeline, DownloadPipeline, RetryRunner, TransferController, TransferScheduler/WakeupPlan, EngineBootstrap, TransferProgressTracker, ConnectivityMonitor) · worker (TransferCoordinatorWorker thin wrapper, CoordinatorWakeupWorker, WorkManagerScheduler, TransferNotifications, AppWorkerFactory) · di (AppContainer) · ui (screens, ViewModels, theme; ui/debug is the temporary Phase 3 screen)
 
 ## Conventions
 - Business logic lives in plain classes with injected dependencies; Workers, Activities and composables stay thin. This is what makes it testable.
