@@ -1,0 +1,10 @@
+node_modules/
+build/
+.gradle/
+local.properties
+*.jks
+keystore.properties
+server/storage/
+.DS_Store
+*.apk
+!release/*.apk
