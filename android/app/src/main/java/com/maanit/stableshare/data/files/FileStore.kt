@@ -47,9 +47,9 @@ class ChunkData(val bytes: ByteArray, val sha256: String)
  * All local file I/O. Upload sources are read through positioned channels and re-checked for
  * size/mtime before every chunk. Download bytes are written to a per-transfer .part file and
  * fsynced before the caller records them (rule 2). Every loop calls ensureActive() so pause and
- * cancel stop work promptly.
+ * cancel stop work promptly. Open only so tests can simulate a full disk.
  */
-class FileStore(
+open class FileStore(
     private val context: Context,
     private val downloadsDir: File = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         ?: File(context.filesDir, "downloads"),
@@ -185,7 +185,7 @@ class FileStore(
     fun partFileValid(part: File, size: Long): Boolean = part.isFile && part.length() == size
 
     /** Positional write followed by fsync; returns only once the bytes are durable. */
-    suspend fun writeChunkAt(part: File, offset: Long, bytes: ByteArray) = withContext(io) {
+    open suspend fun writeChunkAt(part: File, offset: Long, bytes: ByteArray) = withContext(io) {
         if (!part.isFile) throw PartFileMissingException("Part file missing: ${part.name}")
         diskOp {
             RandomAccessFile(part, "rw").use { raf ->
@@ -244,7 +244,7 @@ class FileStore(
 
     fun deletePart(part: File): Boolean = !part.exists() || part.delete()
 
-    fun availableBytes(): Long = downloadsDir.apply { mkdirs() }.usableSpace
+    open fun availableBytes(): Long = downloadsDir.apply { mkdirs() }.usableSpace
 
     // ---- generated test files ----
 

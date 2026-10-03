@@ -1,0 +1,235 @@
+package com.maanit.stableshare.engine
+
+import com.maanit.stableshare.data.files.FileStore
+import com.maanit.stableshare.data.net.ChunkUploadResponse
+import com.maanit.stableshare.data.net.CompleteResponse
+import com.maanit.stableshare.data.net.CreateSessionRequest
+import com.maanit.stableshare.data.net.CreateSessionResponse
+import com.maanit.stableshare.data.net.HttpStatusException
+import com.maanit.stableshare.data.net.Manifest
+import com.maanit.stableshare.data.net.ManifestChunk
+import com.maanit.stableshare.data.net.RangeBody
+import com.maanit.stableshare.data.net.RemoteFile
+import com.maanit.stableshare.data.net.RemoteFileChangedException
+import com.maanit.stableshare.data.net.TransferApi
+import com.maanit.stableshare.data.net.UploadStatus
+import com.maanit.stableshare.domain.ChunkPlanner
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * In-memory implementation of the server protocol (DESIGN.md §3) with the same semantics as
+ * server/src: idempotent create, dedupe of identical chunks, 422 on a bad chunk hash, 409
+ * MISSING_CHUNKS, If-Range → RemoteFileChangedException. Every request is recorded, and
+ * [onRequest] / [fault] script interruptions per request.
+ */
+class FakeTransferServer : TransferApi {
+
+    enum class Op { CREATE, CHUNK, STATUS, COMPLETE, DELETE, LIST, MANIFEST, RANGE }
+
+    /** One request; [attempt] counts earlier requests with the same op and index (1-based). */
+    data class Call(val op: Op, val id: String, val index: Int?, val attempt: Int)
+
+    sealed interface Fault {
+        /** Fails before anything is processed (503, connection drop, …). */
+        data class Before(val error: Throwable) : Fault
+
+        /** Processes and persists, then fails: the lost-response case. */
+        data class After(val error: Throwable) : Fault
+
+        /** Download: one byte flipped in the body. */
+        data object Corrupt : Fault
+    }
+
+    class Session(val request: CreateSessionRequest) {
+        val chunks = ConcurrentHashMap<Int, ByteArray>()
+        @Volatile var completedSha: String? = null
+    }
+
+    class Blob(val fileId: String, val name: String, @Volatile var bytes: ByteArray) {
+        @Volatile var etag: String = etagOf(bytes)
+    }
+
+    val sessions = ConcurrentHashMap<String, Session>()
+    val blobs = ConcurrentHashMap<String, Blob>()
+    val calls = CopyOnWriteArrayList<Call>()
+
+    /** Runs at the start of every request (after it is recorded); may suspend to hold it. */
+    @Volatile var onRequest: suspend (Call) -> Unit = {}
+
+    /** Decides a fault per request; null = behave normally. */
+    @Volatile var fault: (Call) -> Fault? = { null }
+
+    /** Requests currently suspended in [onRequest] (for concurrency tests). */
+    val inFlight = MutableStateFlow(0)
+
+    fun count(op: Op, index: Int? = null, id: String? = null): Int =
+        calls.count { it.op == op && (index == null || it.index == index) && (id == null || it.id == id) }
+
+    fun addFile(fileId: String, bytes: ByteArray, name: String = "$fileId.bin") {
+        blobs[fileId] = Blob(fileId, name, bytes)
+    }
+
+    /** Like POST /admin/files/:id/mutate: new content, new ETag. */
+    fun mutate(fileId: String) {
+        val blob = blobs.getValue(fileId)
+        val copy = blob.bytes.copyOf()
+        if (copy.isEmpty()) blob.bytes = ByteArray(16) else { copy[copy.size / 2] = (copy[copy.size / 2] + 1).toByte(); blob.bytes = copy }
+        blob.etag = etagOf(blob.bytes)
+    }
+
+    // ---- uploads ----
+
+    override suspend fun createSession(uploadId: String, request: CreateSessionRequest): CreateSessionResponse {
+        val call = begin(Op.CREATE, uploadId, null)
+        return respond(call) {
+            val session = sessions.getOrPut(uploadId) { Session(request) }
+            if (session.request != request) throw http(409, "SESSION_CONFLICT")
+            CreateSessionResponse(uploadId, totalChunks(request), request.chunkSize, session.chunks.keys.sorted(), state(session))
+        }
+    }
+
+    override suspend fun uploadChunk(
+        uploadId: String,
+        index: Int,
+        bytes: ByteArray,
+        sha256: String,
+        onProgress: (Long) -> Unit,
+    ): ChunkUploadResponse {
+        val call = begin(Op.CHUNK, uploadId, index)
+        val f = fault(call)
+        if (f is Fault.Before) { onProgress(bytes.size / 2L); throw f.error }
+        onProgress(bytes.size.toLong())
+        val session = sessions[uploadId] ?: throw http(404, "SESSION_NOT_FOUND")
+        if (session.completedSha != null) throw http(409, "SESSION_COMPLETED")
+        val expected = ChunkPlanner.plan(session.request.fileSize, session.request.chunkSize)[index].length
+        if (bytes.size != expected) throw http(400, "CHUNK_LENGTH_MISMATCH")
+        val actual = FileStore.sha256Hex(bytes)
+        if (actual != sha256) throw http(422, "CHUNK_HASH_MISMATCH")
+        val existing = session.chunks[index]
+        val status = when {
+            existing == null -> { session.chunks[index] = bytes.copyOf(); ChunkUploadResponse.STATUS_STORED }
+            FileStore.sha256Hex(existing) == actual -> ChunkUploadResponse.STATUS_ALREADY_RECEIVED
+            else -> throw http(409, "CHUNK_CONFLICT")
+        }
+        if (f is Fault.After) throw f.error
+        return ChunkUploadResponse(uploadId, index, status, actual)
+    }
+
+    override suspend fun getUploadStatus(uploadId: String): UploadStatus {
+        val call = begin(Op.STATUS, uploadId, null)
+        return respond(call) {
+            val s = sessions[uploadId] ?: throw http(404, "SESSION_NOT_FOUND")
+            UploadStatus(
+                uploadId, s.request.fileName, s.request.fileSize, s.request.chunkSize, totalChunks(s.request),
+                s.chunks.keys.sorted(), state(s), s.completedSha,
+            )
+        }
+    }
+
+    override suspend fun completeUpload(uploadId: String): CompleteResponse {
+        val call = begin(Op.COMPLETE, uploadId, null)
+        return respond(call) {
+            val s = sessions[uploadId] ?: throw http(404, "SESSION_NOT_FOUND")
+            s.completedSha?.let { return@respond CompleteResponse(uploadId, "COMPLETED", it, s.request.fileSize) }
+            val missing = (0 until totalChunks(s.request)).filter { !s.chunks.containsKey(it) }
+            if (missing.isNotEmpty()) throw http(409, "MISSING_CHUNKS", missing)
+            val sha = FileStore.sha256Hex(assembled(uploadId))
+            if (sha != s.request.sha256) throw http(422, "FILE_HASH_MISMATCH")
+            s.completedSha = sha
+            CompleteResponse(uploadId, "COMPLETED", sha, s.request.fileSize)
+        }
+    }
+
+    override suspend fun deleteUpload(uploadId: String) {
+        val call = begin(Op.DELETE, uploadId, null)
+        respond(call) { sessions.remove(uploadId); Unit }
+    }
+
+    fun assembled(uploadId: String): ByteArray {
+        val s = sessions.getValue(uploadId)
+        return (0 until totalChunks(s.request)).map { s.chunks.getValue(it) }
+            .fold(ByteArray(0)) { acc, b -> acc + b }
+    }
+
+    // ---- downloads ----
+
+    override suspend fun listFiles(): List<RemoteFile> {
+        val call = begin(Op.LIST, "", null)
+        return respond(call) { blobs.values.map { RemoteFile(it.fileId, it.name, it.bytes.size.toLong(), FileStore.sha256Hex(it.bytes)) } }
+    }
+
+    override suspend fun getManifest(fileId: String, chunkSize: Int?): Manifest {
+        val call = begin(Op.MANIFEST, fileId, null)
+        return respond(call) {
+            val blob = blobs[fileId] ?: throw http(404, "FILE_NOT_FOUND")
+            val size = chunkSize ?: (2 * 1024 * 1024)
+            val chunks = ChunkPlanner.plan(blob.bytes.size.toLong(), size).map {
+                ManifestChunk(it.index, it.offset, it.length, FileStore.sha256Hex(blob.bytes.copyOfRange(it.offset.toInt(), it.offset.toInt() + it.length)))
+            }
+            Manifest(fileId, blob.name, blob.bytes.size.toLong(), FileStore.sha256Hex(blob.bytes), blob.etag, size, chunks)
+        }
+    }
+
+    override suspend fun downloadRange(
+        fileId: String,
+        offset: Long,
+        length: Int,
+        etag: String,
+        onProgress: (Long) -> Unit,
+    ): RangeBody {
+        val blob = blobs[fileId]
+        val index = blob?.let { chunkIndexOf(offset) }
+        val call = begin(Op.RANGE, fileId, index)
+        val f = fault(call)
+        if (f is Fault.Before) { onProgress(length / 2L); throw f.error }
+        if (blob == null) throw http(404, "FILE_NOT_FOUND")
+        if (etag != blob.etag) throw RemoteFileChangedException("Remote file $fileId changed")
+        if (offset + length > blob.bytes.size) throw http(416, "RANGE_NOT_SATISFIABLE")
+        val bytes = blob.bytes.copyOfRange(offset.toInt(), offset.toInt() + length)
+        if (f is Fault.Corrupt) bytes[bytes.size / 2] = (bytes[bytes.size / 2] + 1).toByte()
+        onProgress(length.toLong())
+        if (f is Fault.After) throw f.error
+        return RangeBody(bytes, FileStore.sha256Hex(bytes))
+    }
+
+    /** Range requests carry offsets; tests think in chunk indices, so the chunk size is registered. */
+    @Volatile var downloadChunkSize: Int = 1024
+
+    private fun chunkIndexOf(offset: Long): Int = (offset / downloadChunkSize).toInt()
+
+    // ---- plumbing ----
+
+    private suspend fun begin(op: Op, id: String, index: Int?): Call {
+        val call = Call(op, id, index, calls.count { it.op == op && it.id == id && it.index == index } + 1)
+        calls += call
+        inFlight.update { it + 1 }
+        try {
+            onRequest(call)
+        } finally {
+            inFlight.update { it - 1 }
+        }
+        return call
+    }
+
+    private inline fun <T> respond(call: Call, block: () -> T): T {
+        val f = fault(call)
+        if (f is Fault.Before) throw f.error
+        val result = block()
+        if (f is Fault.After) throw f.error
+        return result
+    }
+
+    private fun totalChunks(r: CreateSessionRequest) = ChunkPlanner.totalChunks(r.fileSize, r.chunkSize)
+
+    private fun state(s: Session) = if (s.completedSha != null) "COMPLETED" else "UPLOADING"
+
+    companion object {
+        fun http(status: Int, code: String, missing: List<Int>? = null) =
+            HttpStatusException(status, code, "fake $code", missing)
+
+        fun etagOf(bytes: ByteArray) = "\"${FileStore.sha256Hex(bytes)}\""
+    }
+}

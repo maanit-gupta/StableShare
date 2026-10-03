@@ -1,0 +1,148 @@
+package com.maanit.stableshare.engine
+
+import android.content.Context
+import android.net.Uri
+import androidx.room.Room
+import com.maanit.stableshare.data.db.AppDatabase
+import com.maanit.stableshare.data.db.TransferEntity
+import com.maanit.stableshare.data.files.FileStore
+import com.maanit.stableshare.data.net.ConnectivityChecker
+import com.maanit.stableshare.data.net.ErrorClassifier
+import com.maanit.stableshare.data.repo.TransferRepository
+import com.maanit.stableshare.data.settings.Settings
+import com.maanit.stableshare.domain.EventType
+import com.maanit.stableshare.domain.RetryPolicy
+import com.maanit.stableshare.domain.TransferState
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
+import java.io.File
+import java.io.RandomAccessFile
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.random.Random
+
+/** Online/offline switch shared by the connectivity monitor and the error classifier's checker. */
+class FakeConnectivity(online: Boolean = true) : ConnectivityMonitor, ConnectivityChecker {
+    override val isOnline = MutableStateFlow(online)
+    override fun isNetworkAvailable(): Boolean = isOnline.value
+}
+
+/** Disk-full simulation for [FileStore.writeChunkAt]. */
+class FullDiskFileStore(context: Context, downloads: File, generated: File) :
+    FileStore(context, downloads, generated, Dispatchers.IO) {
+    @Volatile var full = false
+    override suspend fun writeChunkAt(part: File, offset: Long, bytes: ByteArray) {
+        if (full) throw java.io.IOException("write failed: ENOSPC (No space left on device)")
+        super.writeChunkAt(part, offset, bytes)
+    }
+}
+
+/**
+ * One "process": a database (shared or its own), the real engine, pipelines, repository,
+ * controller and file store, over a [FakeTransferServer] and [FakeConnectivity]. [clock] is the
+ * test's virtual clock when run under runTest.
+ */
+class EngineHarness(
+    val context: Context,
+    val dir: File,
+    val clock: () -> Long,
+    val server: FakeTransferServer = FakeTransferServer(),
+    val net: FakeConnectivity = FakeConnectivity(),
+    val db: AppDatabase = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build(),
+    settings: Settings = Settings(maxConcurrent = 2, uploadChunkSizeBytes = CHUNK),
+    sleep: (suspend (Long) -> Unit)? = null,
+) {
+    val settings = MutableStateFlow(settings)
+    val repo = TransferRepository(db, clock)
+    val files = FullDiskFileStore(context, File(dir, "downloads").apply { mkdirs() }, File(dir, "generated").apply { mkdirs() })
+    val tracker = TransferProgressTracker(clock)
+    val wakeups = CopyOnWriteArrayList<WakeupPlan?>()
+    val ensureRunningCalls = CopyOnWriteArrayList<Long>()
+    val env = PipelineEnv(
+        repo = repo,
+        classifier = ErrorClassifier(net),
+        retryPolicy = RetryPolicy(random = Random(7)),
+        settings = { this.settings.value },
+        tracker = tracker,
+        clock = clock,
+        sleep = sleep ?: { delay(it) },
+    )
+    val engine = TransferEngine(
+        repo = repo,
+        settings = this.settings,
+        connectivity = net,
+        upload = UploadPipeline(server, files, env),
+        download = DownloadPipeline(server, files, env),
+        tracker = tracker,
+        wakeups = { wakeups += it },
+        clock = clock,
+    )
+    val scheduler = TransferScheduler { ensureRunningCalls += clock() }
+    val controller = TransferController(repo, server, files, { this.settings.value }, scheduler, engine)
+
+    init {
+        server.downloadChunkSize = settings.uploadChunkSizeBytes
+    }
+
+    /** A source file of [size] random bytes, queued for upload through the controller. */
+    suspend fun upload(size: Int, seed: Int = size): Pair<TransferEntity, ByteArray> {
+        val bytes = Random(seed).nextBytes(size)
+        val file = File(dir, "src-$seed-$size.bin").apply { writeBytes(bytes) }
+        return controller.uploadUri(Uri.fromFile(file)) to bytes
+    }
+
+    /** A server file of [size] random bytes, queued for download through the controller. */
+    suspend fun download(size: Int, seed: Int = size, fileId: String = "file-$seed"): Pair<TransferEntity, ByteArray> {
+        val bytes = Random(seed).nextBytes(size)
+        server.addFile(fileId, bytes)
+        return controller.download(fileId) to bytes
+    }
+
+    /**
+     * Holds the first request for chunk [index] of [op] in flight until its coroutine is cancelled
+     * (pause, cancel, stop). The returned deferred completes once the request is being held.
+     */
+    fun holdAt(op: FakeTransferServer.Op, index: Int): CompletableDeferred<Unit> {
+        val reached = CompletableDeferred<Unit>()
+        server.onRequest = { c ->
+            if (c.op == op && c.index == index && c.attempt == 1) {
+                reached.complete(Unit)
+                awaitCancellation()
+            }
+        }
+        return reached
+    }
+
+    /** Corrupts one byte of chunk [index] in a download's part file on disk. */
+    suspend fun corruptOnDisk(id: String, index: Int) {
+        val chunk = repo.getChunks(id)[index]
+        RandomAccessFile(localFile(id), "rw").use { raf ->
+            raf.seek(chunk.offset)
+            val b = raf.read()
+            raf.seek(chunk.offset)
+            raf.write(b xor 0xFF)
+        }
+    }
+
+    suspend fun row(id: String): TransferEntity = repo.getTransfer(id)!!
+    suspend fun state(id: String): TransferState = row(id).state
+    suspend fun events(id: String) = repo.getEvents(id)
+    suspend fun eventTypes(id: String): List<EventType> = events(id).map { it.type }
+
+    /** Suspends until the row satisfies [predicate] (Room flow, no polling). */
+    suspend fun awaitRow(id: String, predicate: (TransferEntity) -> Boolean): TransferEntity =
+        repo.observeTransfer(id).mapNotNull { it }.first(predicate)
+
+    /** The file a finished download was saved to. */
+    suspend fun localFile(id: String): File = File(Uri.parse(row(id).localUri).path!!)
+
+    fun close() = db.close()
+
+    companion object {
+        const val CHUNK = 1024
+    }
+}
