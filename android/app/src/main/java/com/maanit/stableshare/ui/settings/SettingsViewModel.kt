@@ -103,6 +103,9 @@ class SettingsViewModel(
 
     fun setAutoRetry(enabled: Boolean) = viewModelScope.launch { settingsRepo.setAutoRetryEnabled(enabled) }
 
+    /** The engine reacts by itself (EngineBootstrap restarts the coordinator, which reschedules its wake-up). */
+    fun setWifiOnly(enabled: Boolean) = viewModelScope.launch { settingsRepo.setWifiOnly(enabled) }
+
     fun loadFaults() {
         viewModelScope.launch {
             runCatching { getFaults() }.onSuccess {

@@ -79,7 +79,10 @@ object ActivityMapper {
         TransferState.TRANSFERRING -> UiText.res(R.string.act_started)
         TransferState.PAUSED -> UiText.res(R.string.act_paused)
         TransferState.VERIFYING -> UiText.res(R.string.act_verifying)
-        TransferState.RETRYING -> UiText.res(R.string.act_problem, ErrorCopy.short(bracketCode(e.message), maxTries))
+        TransferState.RETRYING -> when (val code = bracketCode(e.message)) {
+            ErrorCode.METERED_NETWORK -> UiText.res(R.string.act_waiting_wifi)
+            else -> UiText.res(R.string.act_problem, ErrorCopy.short(code, maxTries))
+        }
         TransferState.FAILED -> UiText.res(R.string.act_stopped, ErrorCopy.short(bracketCode(e.message), maxTries))
         TransferState.COMPLETED -> UiText.res(R.string.act_completed)
         TransferState.CANCELLED -> UiText.res(R.string.act_cancelled)

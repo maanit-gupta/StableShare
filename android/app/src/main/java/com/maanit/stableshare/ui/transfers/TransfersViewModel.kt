@@ -39,6 +39,8 @@ data class TransfersUi(
     val speed: Double? = null,
     val limit: Int = 2,
     val serverUrl: String = "",
+    /** The Wi-Fi only setting (the banner shows when it is on over a metered network). */
+    val wifiOnly: Boolean = false,
     /** Upload ids whose source is a generated test file (tagged "BIN"). */
     val generated: Set<String> = emptySet(),
 ) {
@@ -78,10 +80,11 @@ class TransfersViewModel(
         repo.observeTransfers(),
         tracker.progress,
         restored,
-        settings,
+        combine(settings, networkState, ::Pair),
         ticker,
-    ) { rows, live, restoredIds, s, now ->
-        val items = TransferItem.buildAll(rows, live, restoredIds, now).associateBy { it.id }
+    ) { rows, live, restoredIds, (s, network), now ->
+        val wifiGated = TransferItem.wifiGated(s.wifiOnly, network)
+        val items = TransferItem.buildAll(rows, live, restoredIds, now, wifiGated).associateBy { it.id }
         val visible = rows.filter { visible(it, now) }
         fun sorted(list: List<TransferEntity>) = list.sortedWith(compareBy({ it.createdAt }, { it.id })).map { items.getValue(it.id) }
         val active = sorted(visible.filter { it.state in ACTIVE || it.state == TransferState.COMPLETED })
@@ -99,6 +102,7 @@ class TransfersViewModel(
             speed = speed.takeIf { it > 0 },
             limit = s.maxConcurrent,
             serverUrl = s.serverUrl,
+            wifiOnly = s.wifiOnly,
             generated = rows.filter { it.type == TransferType.UPLOAD && isGenerated(it) }.mapTo(HashSet()) { it.id },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransfersUi())

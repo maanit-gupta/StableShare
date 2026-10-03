@@ -159,12 +159,12 @@ The detail screen, splash and onboarding use the full mascot. "Plane" describes 
 
 | State (and phase) | Face | Right arm | Extra | Plane | Idle motion |
 |---|---|---|---|---|---|
-| QUEUED | focused | rest | none | Perched on the cloud | Cloud breathes (scale 1 → 1.02 → 1, 3 s loop) |
+| QUEUED (also while waiting for Wi-Fi, section 6) | focused | rest | none | Perched on the cloud | Cloud breathes (scale 1 → 1.02 → 1, 3 s loop) |
 | TRANSFERRING, phase Preparing | focused | rest | none | Hovers above the cloud, bobbing ±4 dp (1.2 s loop) | Breathe |
 | TRANSFERRING | focused | rest | data drops (5.8.2) | On the ring at the progress angle | Breathe |
 | VERIFYING | focused | rest | none | Laps the ring once every 1.6 s | Breathe |
 | RETRYING (retryable error) | worried | rest | none | On the ring at the progress angle; wobbles ±8° for 1 s every 3 s | Breathe |
-| RETRYING (NETWORK_UNAVAILABLE) | searching | rest | none | Perched on the cloud | Face layer slides ±4 dp left/right (2 s loop) |
+| RETRYING (NETWORK_UNAVAILABLE or METERED_NETWORK) | searching | rest | none | Perched on the cloud | Face layer slides ±4 dp left/right (2 s loop) |
 | PAUSED | sleepy | rest | none | Parked on the ring at the progress angle, still | Breathe slowly (5 s loop) |
 | FAILED | sad | rest | `mascot_rain` | At the bottom of the ring (angle 180°), nose tilted 35° down | Rain drops fall 6 dp and fade, staggered 200 ms, 1.4 s loop |
 | COMPLETED | happy | wave | none | One fast lap (600 ms), then settles at 12 o'clock | Right arm waves ±12° three times on arrival, then rests raised |
@@ -280,8 +280,9 @@ A `HorizontalPager` with three pages sharing one layout (based on Design A scree
 - Limit pill, top-right and vertically centred on the title: height 28 dp, `neutral.pill`, horizontal padding 12 dp, text "Limit {n}" (label "Limit" in 12 sp `neutral.inkSecondary`, number in 13 sp SemiBold `neutral.inkPrimary`). Tapping it opens Settings scrolled to Transfers.
 
 **Banners** (16 dp below the header, full width, `neutral.card`, 16 dp radius, 16 dp padding, leading 20 dp icon `neutral.inkSecondary`, text `neutral.body`). At most one shows; priority order:
-1. No network (from `ConnectivityMonitor`): icon `cloud_off`, text "You're offline. Transfers will continue when you reconnect."
-2. Server unreachable (a `GET /health` runs when the screen resumes and every 30 s while visible; banner shows after a failed check): icon `dns`, text "Can't reach the server at {url}." plus a text button "Settings" (14 sp SemiBold, `neutral.inkPrimary`, underlined) that opens Settings.
+1. No network (`ConnectivityMonitor.networkState` is Offline): icon `cloud_off`, text "You're offline. Transfers will continue when you reconnect."
+2. Wi-Fi only over mobile data (`wifiOnly` is on and `networkState` is Metered): icon `wifi_off`, text "Wi-Fi only is on. Transfers will continue on Wi-Fi."
+3. Server unreachable (a `GET /health` runs when the screen resumes and every 30 s while visible; banner shows after a failed check): icon `dns`, text "Can't reach the server at {url}." plus a text button "Settings" (14 sp SemiBold, `neutral.inkPrimary`, underlined) that opens Settings.
 
 **Sections**, in this order, each shown only when non-empty:
 1. "Active": TRANSFERRING, VERIFYING, RETRYING
@@ -463,11 +464,11 @@ The ring is a 1.5 dp stroke, drawn with `Canvas`. The default dash pattern is 4 
 
 | State | Stroke | Colour | Motion |
 |---|---|---|---|
-| QUEUED | Dashed | `mint.inkSecondary` at 60% | Static |
+| QUEUED (also while waiting for Wi-Fi) | Dashed | `mint.inkSecondary` at 60% | Static |
 | TRANSFERRING (incl. Preparing) | Dashed | `mint.stroke` | Dashes rotate one turn per 8 s |
 | VERIFYING | Dashed | `mint.stroke` | One turn per 2 s |
 | RETRYING (retryable) | Dashed | `mint.stroke` | Static |
-| RETRYING (network) | Dashed | `mint.inkSecondary` at 60% | Static |
+| RETRYING (NETWORK_UNAVAILABLE or METERED_NETWORK) | Dashed | `mint.inkSecondary` at 60% | Static |
 | PAUSED | Dashed | `mint.stroke` | Static |
 | FAILED | Dashed | `mint.danger` | Static |
 | COMPLETED | Solid | `mint.stroke` | On entering COMPLETED, the gap animates 4 → 0 dp over 400 ms, so the ring visibly closes |
@@ -542,6 +543,7 @@ Title "Settings" (`neutral.title`). Sections are white cards (16 dp radius, row 
 - "Transfers at the same time": a segmented control with 1, 2, 3, 4 (44 dp tall, 12 dp radius, selected segment `neutral.inkPrimary` with white text). Applies immediately.
 - "Piece size for new uploads": segmented 1 MB, 2 MB, 5 MB, with the helper "Applies to uploads you add from now on." (`neutral.meta`).
 - "Retry automatically": a switch (checked track `neutral.inkPrimary`), helper "When off, a failed piece stops the transfer until you tap Retry."
+- "Wi-Fi only", 16 dp below "Retry automatically": a switch styled the same way, helper "Transfers wait for Wi-Fi and won't use mobile data." Stored as `wifiOnly` (default off) and applies at once: turning it on over mobile data stops running transfers (they show "Waiting for Wi-Fi", section 6).
 
 **Network simulator**
 - A notice row at the top of the card: `science` icon 20 dp `neutral.inkSecondary` and "Testing tool. These settings change how the server behaves for every device using it." (`neutral.meta`).
@@ -589,17 +591,21 @@ The ongoing notification shows a determinate progress bar (overall bytes) and up
 | State / condition | List status label | Label colour | Bar fill | Detail title | Detail stats line |
 |---|---|---|---|---|---|
 | QUEUED | "Waiting, #{position} in line" | inkTertiary | `neutral.muted` (shows saved progress) | "Waiting in line" | "#{position} in line. Up to {limit} move at once." |
+| QUEUED while `wifiOnly` is on and `networkState` is not Unmetered | "Waiting for Wi-Fi" | inkSecondary | `neutral.muted` (shows saved progress) | "Waiting for Wi-Fi" | "Wi-Fi only is on. This continues when you connect to Wi-Fi." |
 | TRANSFERRING, phase Preparing | "Preparing, {p}%" (checksum progress) | inkTertiary | `neutral.accent` | "Getting ready..." | "Calculating the file's checksum, {p}%" |
 | TRANSFERRING | "{dir}…" | inkTertiary | `neutral.accent` | "{dir}..." | "{speed}, about {eta} left"; before speed is known: "Starting…" |
 | VERIFYING | "Verifying…" | inkSecondary | `neutral.accent`, full width, alpha pulsing 0.6 ↔ 1 | "Checking..." | "Making sure every byte matches" |
 | RETRYING (retryable) | "Retrying in {s} s" (counts down) | `neutral.warning` | `neutral.warningFill` | "Trying again..." | "Attempt {a} of {max}. Next try in {s} s." |
 | RETRYING (NETWORK_UNAVAILABLE) | "Waiting for network" | inkSecondary | `neutral.muted` | "Waiting for signal" | "This continues on its own when you're back online." |
+| RETRYING (METERED_NETWORK) | "Waiting for Wi-Fi" | inkSecondary | `neutral.muted` | "Waiting for Wi-Fi" | "Wi-Fi only is on. This continues when you connect to Wi-Fi." |
 | PAUSED | "Paused" | inkSecondary | `neutral.paused` | "Paused" | "Progress saved: {done} of {total} pieces." |
 | FAILED | "Failed: {short reason}" | `neutral.danger` | `neutral.danger` | "Something went wrong" | Long reason (section 7) |
 | COMPLETED | "{done}" | `neutral.success` | `neutral.success`, full | "Completed" | "Verified. The SHA-256 checksum matches." |
 | CANCELLED | (leaves the list) | — | — | "Cancelled" | "Partial data was deleted." |
 
 Queue position counts QUEUED transfers in claim order, starting at 1.
+
+The two Wi-Fi rows keep the mascot, ring and plane of their state: QUEUED's for the QUEUED row, and RETRYING (NETWORK_UNAVAILABLE)'s for the METERED_NETWORK row (sections 4.1 and 5.8.3). A waiting row's code follows the network while it waits: METERED_NETWORK on mobile data, NETWORK_UNAVAILABLE when offline.
 
 ## 7. Error copy
 
@@ -632,7 +638,8 @@ Queue position counts QUEUED transfers in claim order, starting at 1.
 | STATE_CHANGE → TRANSFERRING | "Started moving" |
 | STATE_CHANGE → PAUSED | "Paused" |
 | STATE_CHANGE → VERIFYING | "Checking the finished file" |
-| STATE_CHANGE → RETRYING | "Hit a problem: {short reason}" |
+| STATE_CHANGE → RETRYING with METERED_NETWORK | "Waiting for Wi-Fi" |
+| STATE_CHANGE → RETRYING (any other code) | "Hit a problem: {short reason}" |
 | STATE_CHANGE → FAILED | "Stopped: {short reason}" |
 | STATE_CHANGE → COMPLETED | "Completed" |
 | STATE_CHANGE → CANCELLED | "Cancelled" |
@@ -643,7 +650,7 @@ Queue position counts QUEUED transfers in claim order, starting at 1.
 | VERIFIED | "Checksum verified" |
 | ERROR | "{long reason}" |
 | INFO "recovered after process restart" | "Restored after the app restarted" |
-| INFO (other) | The event message as stored |
+| INFO (other) | The event message as stored (for example "Still waiting: now offline" when a row waiting for Wi-Fi loses the network altogether) |
 
 Piece numbers are shown 1-based (index + 1).
 

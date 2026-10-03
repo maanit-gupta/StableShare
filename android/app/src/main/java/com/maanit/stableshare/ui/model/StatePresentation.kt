@@ -39,6 +39,7 @@ object StatePresentation {
         Condition.VERIFYING -> UiText.res(R.string.label_verifying)
         Condition.RETRYING -> UiText.res(R.string.label_retrying, item.retryInSeconds)
         Condition.WAITING_NETWORK -> UiText.res(R.string.label_waiting_network)
+        Condition.QUEUED_WIFI, Condition.WAITING_WIFI -> UiText.res(R.string.label_waiting_wifi)
         Condition.PAUSED -> UiText.res(R.string.label_paused)
         Condition.FAILED -> UiText.res(R.string.label_failed, ErrorCopy.short(item.row.errorCode, maxTries))
         Condition.COMPLETED ->
@@ -48,7 +49,8 @@ object StatePresentation {
 
     fun labelTone(condition: Condition): LabelTone = when (condition) {
         Condition.QUEUED, Condition.PREPARING, Condition.TRANSFERRING -> LabelTone.TERTIARY
-        Condition.VERIFYING, Condition.WAITING_NETWORK, Condition.PAUSED -> LabelTone.SECONDARY
+        Condition.VERIFYING, Condition.WAITING_NETWORK, Condition.QUEUED_WIFI, Condition.WAITING_WIFI, Condition.PAUSED ->
+            LabelTone.SECONDARY
         Condition.RETRYING -> LabelTone.WARNING
         Condition.FAILED -> LabelTone.DANGER
         Condition.COMPLETED -> LabelTone.SUCCESS
@@ -56,7 +58,8 @@ object StatePresentation {
     }
 
     fun barFill(condition: Condition): BarFill = when (condition) {
-        Condition.QUEUED, Condition.WAITING_NETWORK, Condition.CANCELLED -> BarFill.MUTED
+        Condition.QUEUED, Condition.QUEUED_WIFI, Condition.WAITING_NETWORK, Condition.WAITING_WIFI, Condition.CANCELLED ->
+            BarFill.MUTED
         Condition.PREPARING, Condition.TRANSFERRING -> BarFill.ACCENT
         Condition.VERIFYING -> BarFill.ACCENT_PULSE
         Condition.RETRYING -> BarFill.WARNING
@@ -80,6 +83,7 @@ object StatePresentation {
             Condition.VERIFYING -> R.string.title_verifying
             Condition.RETRYING -> R.string.title_retrying
             Condition.WAITING_NETWORK -> R.string.title_waiting_network
+            Condition.QUEUED_WIFI, Condition.WAITING_WIFI -> R.string.title_waiting_wifi
             Condition.PAUSED -> R.string.title_paused
             Condition.FAILED -> R.string.title_failed
             Condition.COMPLETED -> R.string.title_completed
@@ -109,6 +113,7 @@ object StatePresentation {
         Condition.VERIFYING -> UiText.res(R.string.stats_verifying)
         Condition.RETRYING -> UiText.res(R.string.stats_retrying, retryAttempt, maxTries, item.retryInSeconds)
         Condition.WAITING_NETWORK -> UiText.res(R.string.stats_waiting_network)
+        Condition.QUEUED_WIFI, Condition.WAITING_WIFI -> UiText.res(R.string.stats_waiting_wifi)
         Condition.PAUSED -> UiText.plural(R.plurals.stats_paused, item.row.totalChunks, doneChunks, item.row.totalChunks)
         Condition.FAILED -> ErrorCopy.long(item.row.errorCode, maxTries)
         Condition.COMPLETED -> UiText.res(R.string.stats_completed)
@@ -116,9 +121,10 @@ object StatePresentation {
     }
 
     fun mood(condition: Condition): MascotMood = when (condition) {
-        Condition.QUEUED, Condition.PREPARING, Condition.TRANSFERRING, Condition.VERIFYING -> MascotMood.FOCUSED
+        Condition.QUEUED, Condition.QUEUED_WIFI, Condition.PREPARING, Condition.TRANSFERRING, Condition.VERIFYING ->
+            MascotMood.FOCUSED
         Condition.RETRYING -> MascotMood.WORRIED
-        Condition.WAITING_NETWORK -> MascotMood.SEARCHING
+        Condition.WAITING_NETWORK, Condition.WAITING_WIFI -> MascotMood.SEARCHING
         Condition.PAUSED -> MascotMood.SLEEPY
         Condition.FAILED -> MascotMood.SAD
         Condition.COMPLETED -> MascotMood.HAPPY
@@ -126,11 +132,11 @@ object StatePresentation {
     }
 
     fun ring(condition: Condition): RingStyle = when (condition) {
-        Condition.QUEUED -> RingStyle(RingStroke.DASHED, RingTone.SECONDARY_60, null)
+        Condition.QUEUED, Condition.QUEUED_WIFI -> RingStyle(RingStroke.DASHED, RingTone.SECONDARY_60, null)
         Condition.PREPARING, Condition.TRANSFERRING -> RingStyle(RingStroke.DASHED, RingTone.STROKE, 8_000)
         Condition.VERIFYING -> RingStyle(RingStroke.DASHED, RingTone.STROKE, 2_000)
         Condition.RETRYING -> RingStyle(RingStroke.DASHED, RingTone.STROKE, null)
-        Condition.WAITING_NETWORK -> RingStyle(RingStroke.DASHED, RingTone.SECONDARY_60, null)
+        Condition.WAITING_NETWORK, Condition.WAITING_WIFI -> RingStyle(RingStroke.DASHED, RingTone.SECONDARY_60, null)
         Condition.PAUSED -> RingStyle(RingStroke.DASHED, RingTone.STROKE, null)
         Condition.FAILED -> RingStyle(RingStroke.DASHED, RingTone.DANGER, null)
         Condition.COMPLETED -> RingStyle(RingStroke.SOLID, RingTone.STROKE, null)
@@ -138,7 +144,7 @@ object StatePresentation {
     }
 
     fun plane(condition: Condition): PlaneSpot = when (condition) {
-        Condition.QUEUED, Condition.WAITING_NETWORK -> PlaneSpot.PERCHED
+        Condition.QUEUED, Condition.QUEUED_WIFI, Condition.WAITING_NETWORK, Condition.WAITING_WIFI -> PlaneSpot.PERCHED
         Condition.PREPARING -> PlaneSpot.HOVER
         Condition.TRANSFERRING, Condition.PAUSED -> PlaneSpot.RING_PROGRESS
         Condition.VERIFYING -> PlaneSpot.RING_LAP

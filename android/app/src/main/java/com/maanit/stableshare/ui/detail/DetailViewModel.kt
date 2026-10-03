@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -58,6 +59,8 @@ class DetailViewModel(
     private val isGenerated: (TransferEntity) -> Boolean,
     private val appScope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Wi-Fi only is on and the network is not unmetered (a QUEUED row waits for Wi-Fi). */
+    wifiGated: Flow<Boolean> = flowOf(false),
 ) : ViewModel() {
 
     private val ticker = flow {
@@ -71,16 +74,22 @@ class DetailViewModel(
         Triple(rows, chunks, events)
     }
 
-    private val live = combine(tracker.progress, restored, settings, ticker) { progress, restoredIds, s, now ->
-        LiveInputs(progress[id], id in restoredIds, s.maxConcurrent, now)
+    private val live = combine(tracker.progress, restored, settings, wifiGated, ticker) { progress, restoredIds, s, gated, now ->
+        LiveInputs(progress[id], id in restoredIds, s.maxConcurrent, gated, now)
     }
 
-    private data class LiveInputs(val progress: com.maanit.stableshare.engine.LiveProgress?, val restored: Boolean, val maxConcurrent: Int, val now: Long)
+    private data class LiveInputs(
+        val progress: com.maanit.stableshare.engine.LiveProgress?,
+        val restored: Boolean,
+        val maxConcurrent: Int,
+        val wifiGated: Boolean,
+        val now: Long,
+    )
 
     val state: StateFlow<DetailState> = combine(stored, live) { (rows, chunks, events), l ->
         val row = rows.firstOrNull { it.id == id } ?: return@combine DetailState.Gone
         val position = TransferItem.queuePositions(rows)[id]
-        val item = TransferItem.build(row, l.progress, position, l.restored, l.now)
+        val item = TransferItem.build(row, l.progress, position, l.restored, l.now, l.wifiGated)
         DetailState.Ready(
             DetailUi(
                 item = item,

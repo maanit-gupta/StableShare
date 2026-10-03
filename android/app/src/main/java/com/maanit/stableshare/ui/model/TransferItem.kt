@@ -7,29 +7,40 @@ import com.maanit.stableshare.domain.TransferAction
 import com.maanit.stableshare.domain.TransferState
 import com.maanit.stableshare.domain.TransferType
 import com.maanit.stableshare.engine.LiveProgress
+import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.engine.TransferPhase
 import kotlin.math.ceil
 
 /** The rows of the state presentation table (UI-SPEC §6): a state, refined by phase or error. */
 enum class Condition {
     QUEUED,
+
+    /** QUEUED while Wi-Fi only is on and the network is not unmetered. */
+    QUEUED_WIFI,
     PREPARING,
     TRANSFERRING,
     VERIFYING,
     RETRYING,
     WAITING_NETWORK,
+
+    /** RETRYING with METERED_NETWORK. */
+    WAITING_WIFI,
     PAUSED,
     FAILED,
     COMPLETED,
     CANCELLED,
 }
 
-fun conditionOf(state: TransferState, errorCode: ErrorCode?, phase: TransferPhase?): Condition = when (state) {
-    TransferState.QUEUED -> Condition.QUEUED
+/** [wifiGated]: Wi-Fi only is on and the network is not unmetered, so QUEUED rows wait for Wi-Fi. */
+fun conditionOf(state: TransferState, errorCode: ErrorCode?, phase: TransferPhase?, wifiGated: Boolean = false): Condition = when (state) {
+    TransferState.QUEUED -> if (wifiGated) Condition.QUEUED_WIFI else Condition.QUEUED
     TransferState.TRANSFERRING -> if (phase is TransferPhase.Preparing) Condition.PREPARING else Condition.TRANSFERRING
     TransferState.VERIFYING -> Condition.VERIFYING
-    TransferState.RETRYING ->
-        if (errorCode == ErrorCode.NETWORK_UNAVAILABLE) Condition.WAITING_NETWORK else Condition.RETRYING
+    TransferState.RETRYING -> when (errorCode) {
+        ErrorCode.NETWORK_UNAVAILABLE -> Condition.WAITING_NETWORK
+        ErrorCode.METERED_NETWORK -> Condition.WAITING_WIFI
+        else -> Condition.RETRYING
+    }
     TransferState.PAUSED -> Condition.PAUSED
     TransferState.FAILED -> Condition.FAILED
     TransferState.COMPLETED -> Condition.COMPLETED
@@ -74,15 +85,19 @@ data class TransferItem(
             return primary + listOfNotNull(TransferAction.CANCEL.takeIf { it in allowed })
         }
 
+        /** QUEUED rows wait for Wi-Fi: Wi-Fi only is on and the network is not unmetered (UI-SPEC §6). */
+        fun wifiGated(wifiOnly: Boolean, network: NetworkState): Boolean = wifiOnly && network != NetworkState.Unmetered
+
         fun build(
             row: TransferEntity,
             live: LiveProgress?,
             queuePosition: Int?,
             restored: Boolean,
             now: Long,
+            wifiGated: Boolean = false,
         ): TransferItem {
             val phase = live?.phase
-            val condition = conditionOf(row.state, row.errorCode, phase)
+            val condition = conditionOf(row.state, row.errorCode, phase, wifiGated)
             val bytes = live?.bytes ?: row.bytesDone
             val preparing = (phase as? TransferPhase.Preparing)?.let { displayPercent(it.hashedBytes, row.fileSize, row.state) } ?: 0
             val retryAt = (phase as? TransferPhase.Retrying)?.atMs ?: row.nextRetryAt
@@ -109,9 +124,15 @@ data class TransferItem(
                 .mapIndexed { i, r -> r.id to i + 1 }
                 .toMap()
 
-        fun buildAll(rows: List<TransferEntity>, live: Map<String, LiveProgress>, restored: Set<String>, now: Long): List<TransferItem> {
+        fun buildAll(
+            rows: List<TransferEntity>,
+            live: Map<String, LiveProgress>,
+            restored: Set<String>,
+            now: Long,
+            wifiGated: Boolean = false,
+        ): List<TransferItem> {
             val positions = queuePositions(rows)
-            return rows.map { build(it, live[it.id], positions[it.id], it.id in restored, now) }
+            return rows.map { build(it, live[it.id], positions[it.id], it.id in restored, now, wifiGated) }
         }
     }
 }

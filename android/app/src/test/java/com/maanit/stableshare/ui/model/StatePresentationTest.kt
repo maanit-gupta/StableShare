@@ -8,6 +8,7 @@ import com.maanit.stableshare.domain.TransferAction
 import com.maanit.stableshare.domain.TransferState
 import com.maanit.stableshare.domain.TransferType
 import com.maanit.stableshare.engine.LiveProgress
+import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.engine.TransferPhase
 import com.maanit.stableshare.ui.mascot.MascotMood
 import org.junit.Assert.assertEquals
@@ -145,6 +146,57 @@ class StatePresentationTest {
         assertEquals("This continues on its own when you're back online.", stats(i))
         assertEquals(MascotMood.SEARCHING, StatePresentation.mood(i.condition))
         assertEquals(PlaneSpot.PERCHED, StatePresentation.plane(i.condition))
+    }
+
+    @Test
+    fun waitingForWifi() {
+        val i = item(row(TransferState.RETRYING, error = ErrorCode.METERED_NETWORK))
+        assertEquals(Condition.WAITING_WIFI, i.condition)
+        assertEquals("Waiting for Wi-Fi", label(i))
+        assertEquals(LabelTone.SECONDARY, StatePresentation.labelTone(i.condition))
+        assertEquals(BarFill.MUTED, StatePresentation.barFill(i.condition))
+        assertEquals("Waiting for Wi-Fi", title(i))
+        assertEquals("Wi-Fi only is on. This continues when you connect to Wi-Fi.", stats(i))
+        // Mascot, ring and plane exactly as RETRYING with NETWORK_UNAVAILABLE.
+        val network = item(row(TransferState.RETRYING, error = ErrorCode.NETWORK_UNAVAILABLE)).condition
+        assertEquals(StatePresentation.mood(network), StatePresentation.mood(i.condition))
+        assertEquals(StatePresentation.ring(network), StatePresentation.ring(i.condition))
+        assertEquals(StatePresentation.plane(network), StatePresentation.plane(i.condition))
+        assertEquals(MascotMood.SEARCHING, StatePresentation.mood(i.condition))
+        assertEquals(listOf(TransferAction.PAUSE, TransferAction.CANCEL), i.rowActions)
+    }
+
+    @Test
+    fun queuedWhileWifiOnlyHoldsItBack() {
+        val i = TransferItem.build(row(TransferState.QUEUED), null, queuePosition = 2, restored = false, now = now, wifiGated = true)
+        assertEquals(Condition.QUEUED_WIFI, i.condition)
+        assertEquals("Waiting for Wi-Fi", label(i))
+        assertEquals(LabelTone.SECONDARY, StatePresentation.labelTone(i.condition))
+        assertEquals(BarFill.MUTED, StatePresentation.barFill(i.condition))
+        assertEquals(0.42f, StatePresentation.barFraction(i), 0.001f)
+        assertEquals("Waiting for Wi-Fi", title(i))
+        assertEquals("Wi-Fi only is on. This continues when you connect to Wi-Fi.", stats(i))
+        // Mascot, ring and plane stay as QUEUED.
+        val queued = item(row(TransferState.QUEUED), position = 2).condition
+        assertEquals(StatePresentation.mood(queued), StatePresentation.mood(i.condition))
+        assertEquals(StatePresentation.ring(queued), StatePresentation.ring(i.condition))
+        assertEquals(StatePresentation.plane(queued), StatePresentation.plane(i.condition))
+        assertEquals(listOf(TransferAction.PAUSE, TransferAction.CANCEL), i.rowActions)
+    }
+
+    @Test
+    fun wifiGatingFollowsTheSettingAndTheNetwork() {
+        assertFalse(TransferItem.wifiGated(wifiOnly = false, NetworkState.Metered))
+        assertFalse(TransferItem.wifiGated(wifiOnly = true, NetworkState.Unmetered))
+        assertTrue(TransferItem.wifiGated(wifiOnly = true, NetworkState.Metered))
+        assertTrue(TransferItem.wifiGated(wifiOnly = true, NetworkState.Offline))
+        // Only QUEUED rows change; a row that is moving, paused or waiting keeps its condition.
+        listOf(TransferState.TRANSFERRING, TransferState.PAUSED, TransferState.FAILED).forEach {
+            val gated = TransferItem.build(row(it, error = ErrorCode.TIMEOUT), null, null, false, now, wifiGated = true)
+            assertEquals(item(row(it, error = ErrorCode.TIMEOUT)).condition, gated.condition)
+        }
+        val offline = TransferItem.build(row(TransferState.RETRYING, error = ErrorCode.NETWORK_UNAVAILABLE), null, null, false, now, wifiGated = true)
+        assertEquals(Condition.WAITING_NETWORK, offline.condition)
     }
 
     @Test

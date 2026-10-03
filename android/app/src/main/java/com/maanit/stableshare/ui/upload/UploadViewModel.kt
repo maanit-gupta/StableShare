@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -61,6 +62,8 @@ class UploadViewModel(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Writes a test file of the given MiB, reporting bytes written (FileStore.generateTestFile). */
     private val generateFile: suspend (Int, (Long) -> Unit) -> File = { mb, progress -> files.generateTestFile(mb, onProgress = progress) },
+    /** Wi-Fi only is on and the network is not unmetered (QUEUED rows wait for Wi-Fi). */
+    wifiGated: Flow<Boolean> = flowOf(false),
 ) : ViewModel() {
 
     private val _selection = MutableStateFlow<Selection>(Selection.None)
@@ -86,8 +89,14 @@ class UploadViewModel(
         }
     }
 
-    val rows: StateFlow<List<UploadRow>> = combine(repo.observeTransfers(), progress, restored, revealed, ticker) { all, live, restoredIds, ids, now ->
-        val items = TransferItem.buildAll(all, live, restoredIds, now).associateBy { it.id }
+    val rows: StateFlow<List<UploadRow>> = combine(
+        repo.observeTransfers(),
+        combine(progress, wifiGated, ::Pair),
+        restored,
+        revealed,
+        ticker,
+    ) { all, (live, gated), restoredIds, ids, now ->
+        val items = TransferItem.buildAll(all, live, restoredIds, now, gated).associateBy { it.id }
         ids.mapNotNull { id -> items[id]?.let { UploadRow(it, files.isGeneratedFile(it.row.localUri)) } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

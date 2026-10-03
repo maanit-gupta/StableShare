@@ -51,6 +51,7 @@
     <string name="transfers_idle">Nothing moving right now</string>
     <string name="limit_pill_label">Limit</string>
     <string name="banner_offline">You\'re offline. Transfers will continue when you reconnect.</string>
+    <string name="banner_wifi_only">Wi-Fi only is on. Transfers will continue on Wi-Fi.</string>
     <string name="banner_server_unreachable">Can\'t reach the server at %1$s.</string>
     <string name="banner_server_action">Settings</string>
     <string name="section_active">Active</string>
@@ -203,6 +204,8 @@
     <string name="settings_piece_helper">Applies to uploads you add from now on.</string>
     <string name="settings_auto_retry">Retry automatically</string>
     <string name="settings_auto_retry_helper">When off, a failed piece stops the transfer until you tap Retry.</string>
+    <string name="settings_wifi_only">Wi-Fi only</string>
+    <string name="settings_wifi_only_helper">Transfers wait for Wi-Fi and won\'t use mobile data.</string>
     <string name="simulator_notice">Testing tool. These settings change how the server behaves for every device using it.</string>
     <string name="preset_off">Off</string>
     <string name="preset_slow">Slow network</string>
@@ -268,6 +271,7 @@
     <string name="label_verifying">Verifying…</string>
     <string name="label_retrying">Retrying in %1$d s</string>
     <string name="label_waiting_network">Waiting for network</string>
+    <string name="label_waiting_wifi">Waiting for Wi-Fi</string>
     <string name="label_paused">Paused</string>
     <string name="label_failed">Failed: %1$s</string>
     <string name="label_uploaded">Uploaded</string>
@@ -282,6 +286,7 @@
     <string name="title_verifying">Checking...</string>
     <string name="title_retrying">Trying again...</string>
     <string name="title_waiting_network">Waiting for signal</string>
+    <string name="title_waiting_wifi">Waiting for Wi-Fi</string>
     <string name="title_paused">Paused</string>
     <string name="title_failed">Something went wrong</string>
     <string name="title_completed">Completed</string>
@@ -295,6 +300,7 @@
     <string name="stats_verifying">Making sure every byte matches</string>
     <string name="stats_retrying">Attempt %1$d of %2$d. Next try in %3$d s.</string>
     <string name="stats_waiting_network">This continues on its own when you\'re back online.</string>
+    <string name="stats_waiting_wifi">Wi-Fi only is on. This continues when you connect to Wi-Fi.</string>
     <plurals name="stats_paused">
         <item quantity="one">Progress saved: %1$d of %2$d piece.</item>
         <item quantity="other">Progress saved: %1$d of %2$d pieces.</item>
@@ -352,6 +358,7 @@
     <string name="act_paused">Paused</string>
     <string name="act_verifying">Checking the finished file</string>
     <string name="act_problem">Hit a problem: %1$s</string>
+    <string name="act_waiting_wifi">Waiting for Wi-Fi</string>
     <string name="act_stopped">Stopped: %1$s</string>
     <string name="act_completed">Completed</string>
     <string name="act_cancelled">Cancelled</string>

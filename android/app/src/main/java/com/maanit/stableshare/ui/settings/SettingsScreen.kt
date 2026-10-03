@@ -157,27 +157,48 @@ fun SettingsScreen(
                 )
                 Text(stringResource(R.string.settings_piece_helper), style = Neutral.type.meta)
                 Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Label(stringResource(R.string.settings_auto_retry), Modifier.weight(1f))
-                    Switch(
-                        checked = s.autoRetryEnabled,
-                        onCheckedChange = { vm.setAutoRetry(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = Neutral.colors.inkPrimary,
-                            checkedThumbColor = Neutral.colors.white,
-                            uncheckedTrackColor = Neutral.colors.pill,
-                            uncheckedThumbColor = Neutral.colors.inkTertiary,
-                            uncheckedBorderColor = Neutral.colors.border,
-                        ),
-                    )
-                }
-                Text(stringResource(R.string.settings_auto_retry_helper), style = Neutral.type.meta)
+                SettingSwitch(
+                    label = stringResource(R.string.settings_auto_retry),
+                    helper = stringResource(R.string.settings_auto_retry_helper),
+                    checked = s.autoRetryEnabled,
+                    onCheckedChange = { vm.setAutoRetry(it) },
+                    tag = "autoRetry",
+                )
+                Spacer(Modifier.height(16.dp))
+                SettingSwitch(
+                    label = stringResource(R.string.settings_wifi_only),
+                    helper = stringResource(R.string.settings_wifi_only_helper),
+                    checked = s.wifiOnly,
+                    onCheckedChange = { vm.setWifiOnly(it) },
+                    tag = "wifiOnly",
+                )
             }
             Section(stringResource(R.string.settings_section_simulator)) { SimulatorCard(vm) }
             Section(stringResource(R.string.settings_section_about)) { AboutCard(onShowIntro, onOpenLicences) }
         }
         StatusBarScrim(Neutral.colors.page)
     }
+}
+
+/** A labelled switch with its helper line below (UI-SPEC §5.10: checked track `neutral.inkPrimary`). */
+@Composable
+private fun SettingSwitch(label: String, helper: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, tag: String) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Label(label, Modifier.weight(1f))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testTag(tag),
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = Neutral.colors.inkPrimary,
+                checkedThumbColor = Neutral.colors.white,
+                uncheckedTrackColor = Neutral.colors.pill,
+                uncheckedThumbColor = Neutral.colors.inkTertiary,
+                uncheckedBorderColor = Neutral.colors.border,
+            ),
+        )
+    }
+    Text(helper, style = Neutral.type.meta)
 }
 
 @Composable

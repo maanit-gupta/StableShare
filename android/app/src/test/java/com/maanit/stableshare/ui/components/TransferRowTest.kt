@@ -111,6 +111,23 @@ class TransferRowTest {
     }
 
     @Test
+    fun waitingForWifi() {
+        show(item(row(TransferState.RETRYING, ErrorCode.METERED_NETWORK)))
+        compose.onNodeWithText("Waiting for Wi-Fi").assertExists()
+        compose.onNodeWithText("Waiting for network").assertDoesNotExist()
+        assertButtons("Pause", "Cancel")
+    }
+
+    @Test
+    fun queuedWhileWifiOnlyHoldsItBack() {
+        show(TransferItem.build(row(TransferState.QUEUED), null, queuePosition = 3, restored = false, now = 0, wifiGated = true))
+        compose.onNodeWithText("Waiting for Wi-Fi").assertExists()
+        compose.onNodeWithText("Waiting, #3 in line").assertDoesNotExist()
+        compose.onNodeWithText("84 of 200 MB").assertExists()
+        assertButtons("Pause", "Cancel")
+    }
+
+    @Test
     fun pausedOffersResume() {
         show(item(row(TransferState.PAUSED)))
         compose.onNodeWithText("Paused").assertExists()

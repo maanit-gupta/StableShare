@@ -100,6 +100,10 @@ class ActivityMapperTest {
         repo.transition(id, TransferState.RETRYING, ErrorCode.NETWORK_UNAVAILABLE, "offline", nextRetryAt = null)
         repo.promoteWaitingForNetwork() // RETRYING → QUEUED (hidden)
         repo.transition(id, TransferState.TRANSFERRING)
+        repo.transition(id, TransferState.RETRYING, ErrorCode.METERED_NETWORK, "wifi only", nextRetryAt = null)
+        repo.recodeNetworkWaiters(ErrorCode.NETWORK_UNAVAILABLE) // INFO, shown as stored
+        repo.promoteWaitingForNetwork() // RETRYING → QUEUED (hidden)
+        repo.transition(id, TransferState.TRANSFERRING)
         repo.logEvent(id, EventType.CHUNK_CONFIRMED_AFTER_LOST_RESPONSE, "Chunk 1: response lost, but GET status lists it; not resending", chunkIndex = 1)
         repo.logEvent(id, EventType.ERROR, "[DISK_FULL] write failed")
         repo.logEvent(id, EventType.INFO, "Cleanup: server session deleted")
@@ -117,6 +121,9 @@ class ActivityMapperTest {
                 "Retry requested",
                 "Started moving",
                 "Hit a problem: No connection",
+                "Started moving",
+                "Waiting for Wi-Fi",
+                "Still waiting: now offline",
                 "Started moving",
                 "Piece 2 confirmed by the server after a lost reply",
                 "Your phone ran out of space. Free some up, then tap Retry.",

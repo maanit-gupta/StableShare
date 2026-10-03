@@ -2,15 +2,20 @@ package com.maanit.stableshare.ui.screens
 
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -27,6 +32,7 @@ import com.maanit.stableshare.ui.settings.SettingsViewModel
 import com.maanit.stableshare.ui.theme.StableShareTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,23 +40,23 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.IOException
 
-/** UI-SPEC §5.10: "Transfers at the same time" applies immediately and persists. */
+/** UI-SPEC §5.10: "Transfers at the same time" and "Wi-Fi only" apply immediately and persist. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class SettingsScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test
-    fun concurrencySegmentedControlPersistsItsValue() {
-        val container = ApplicationProvider.getApplicationContext<StableShareApp>().container
-        var screen by mutableIntStateOf(0)
+    private val container = ApplicationProvider.getApplicationContext<StableShareApp>().container
+    private val screen = mutableIntStateOf(0)
+
+    private fun showSettings() {
         compose.setContent {
             StableShareTheme(reducedMotion = true) {
                 CompositionLocalProvider(LocalAppContainer provides container, LocalSnackbar provides SnackbarHostState()) {
                     // A new key gives a brand-new ViewModel, as if the screen were opened again.
-                    key(screen) {
+                    key(screen.intValue) {
                         val vm: SettingsViewModel = viewModel(
-                            key = "settings-$screen",
+                            key = "settings-${screen.intValue}",
                             factory = viewModelFactory {
                                 initializer {
                                     val offline: suspend () -> Nothing = { throw IOException("no server in tests") }
@@ -71,6 +77,16 @@ class SettingsScreenTest {
                 }
             }
         }
+    }
+
+    /** Leaves and opens the screen again (a new ViewModel reading DataStore). */
+    private fun reopen() {
+        screen.intValue++
+    }
+
+    @Test
+    fun concurrencySegmentedControlPersistsItsValue() {
+        showSettings()
         fun segment(n: Int) = compose.onNode(hasText(n.toString()) and hasParent(hasTestTag("concurrency")).not() and hasAncestorTag("concurrency"))
 
         compose.waitUntil(5_000) { compose.onAllNodes(hasAncestorTag("concurrency")).fetchSemanticsNodes().isNotEmpty() }
@@ -82,11 +98,33 @@ class SettingsScreenTest {
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("3") and hasAncestorTag("concurrency") and androidx.compose.ui.test.isSelected()).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(3, runBlocking { container.settingsRepository.current().maxConcurrent })
 
-        screen++
+        reopen()
         compose.waitUntil(5_000) { compose.onAllNodes(hasAncestorTag("concurrency")).fetchSemanticsNodes().isNotEmpty() }
         segment(3).performScrollTo().assertIsSelected()
         segment(2).assertIsNotSelected()
         assertEquals(3, runBlocking { container.settingsRepository.current().maxConcurrent })
+    }
+
+    @Test
+    fun wifiOnlySwitchSitsBelowRetryAndPersistsItsValue() {
+        showSettings()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wifiOnly").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wifiOnly").performScrollTo().assertIsOff()
+        compose.onNodeWithText("Wi-Fi only").assertExists()
+        compose.onNodeWithText("Transfers wait for Wi-Fi and won't use mobile data.").assertExists()
+        val retryTop = compose.onNodeWithTag("autoRetry").getUnclippedBoundsInRoot().top
+        val wifiTop = compose.onNodeWithTag("wifiOnly").getUnclippedBoundsInRoot().top
+        assertTrue("Wi-Fi only sits below Retry automatically", wifiTop > retryTop)
+
+        compose.onNodeWithTag("wifiOnly").performSemanticsAction(SemanticsActions.OnClick)
+        // The switch shows the stored value, so On means DataStore has it.
+        compose.waitUntil(5_000) { compose.onAllNodes(hasTestTag("wifiOnly") and isOn()).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(runBlocking { container.settingsRepository.current().wifiOnly })
+
+        reopen()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wifiOnly").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wifiOnly").performScrollTo().assertIsOn()
+        assertTrue(runBlocking { container.settingsRepository.current().wifiOnly })
     }
 
     private fun hasAncestorTag(tag: String) = androidx.compose.ui.test.hasAnyAncestor(hasTestTag(tag))

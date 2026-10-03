@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Upload
@@ -88,7 +89,6 @@ fun TransfersScreen(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val network by vm.networkState.collectAsStateWithLifecycle()
-    val online = network != NetworkState.Offline
     val reachable by vm.serverReachable.collectAsStateWithLifecycle()
     var chooser by rememberSaveable { mutableStateOf(false) }
     var download by rememberSaveable { mutableStateOf(false) }
@@ -114,7 +114,7 @@ fun TransfersScreen(
         if (ui.isEmpty) {
             Column(Modifier.fillMaxSize().padding(top = top + 24.dp, start = 24.dp, end = 24.dp)) {
                 Header(ui, onOpenSettings)
-                BannerSlot(online, reachable, ui.serverUrl, onOpenSettings)
+                BannerSlot(network, ui.wifiOnly, reachable, ui.serverUrl, onOpenSettings)
                 EmptyState(
                     onUpload = onOpenUpload,
                     onDownload = { download = true },
@@ -129,7 +129,7 @@ fun TransfersScreen(
                 item(key = "header") {
                     Column {
                         Header(ui, onOpenSettings)
-                        BannerSlot(online, reachable, ui.serverUrl, onOpenSettings)
+                        BannerSlot(network, ui.wifiOnly, reachable, ui.serverUrl, onOpenSettings)
                     }
                 }
                 section("active", R.string.section_active, ui.active, ui, onOpenDetail, onAction)
@@ -197,13 +197,23 @@ private fun Header(ui: TransfersUi, onOpenSettings: (Boolean) -> Unit) {
     Text(subtitle, style = Neutral.type.subtitle)
 }
 
-/** At most one banner: offline first, then server unreachable (UI-SPEC §5.4). */
+/** At most one banner: offline, then Wi-Fi only over a metered network, then server unreachable (UI-SPEC §5.4). */
 @Composable
-private fun BannerSlot(online: Boolean, reachable: Boolean, serverUrl: String, onOpenSettings: (Boolean) -> Unit) {
+internal fun BannerSlot(
+    network: NetworkState,
+    wifiOnly: Boolean,
+    reachable: Boolean,
+    serverUrl: String,
+    onOpenSettings: (Boolean) -> Unit,
+) {
     when {
-        !online -> {
+        network == NetworkState.Offline -> {
             Spacer(Modifier.height(16.dp))
             Banner(Icons.Outlined.CloudOff, stringResource(R.string.banner_offline))
+        }
+        wifiOnly && network == NetworkState.Metered -> {
+            Spacer(Modifier.height(16.dp))
+            Banner(Icons.Outlined.WifiOff, stringResource(R.string.banner_wifi_only))
         }
         !reachable -> {
             Spacer(Modifier.height(16.dp))

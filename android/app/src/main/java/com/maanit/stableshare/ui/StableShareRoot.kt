@@ -49,7 +49,11 @@ import com.maanit.stableshare.ui.transfers.TransfersScreen
 import com.maanit.stableshare.ui.transfers.TransfersViewModel
 import com.maanit.stableshare.ui.upload.UploadScreen
 import com.maanit.stableshare.ui.upload.UploadViewModel
+import com.maanit.stableshare.ui.model.TransferItem
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -212,6 +216,7 @@ fun StableShareRoot(
                             restored = transferEngine.restoredIds,
                             classifier = errorClassifier,
                             appScope = applicationScope,
+                            wifiGated = wifiGated(),
                         )
                     }
                     UploadScreen(
@@ -233,6 +238,7 @@ fun StableShareRoot(
                             controller = transferController,
                             isGenerated = { fileStore.isGeneratedFile(it.localUri) },
                             appScope = applicationScope,
+                            wifiGated = wifiGated(),
                         )
                     }
                     DetailScreen(vm, onBack = { if (!navController.popBackStack()) openTransfers(clear = true) })
@@ -288,3 +294,9 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
         },
     )
 }
+
+/** True while QUEUED rows wait for Wi-Fi: Wi-Fi only is on and the network is not unmetered (UI-SPEC §6). */
+private fun AppContainer.wifiGated(): Flow<Boolean> =
+    combine(settingsRepository.settings, connectivityMonitor.networkState) { s, network ->
+        TransferItem.wifiGated(s.wifiOnly, network)
+    }.distinctUntilChanged()
