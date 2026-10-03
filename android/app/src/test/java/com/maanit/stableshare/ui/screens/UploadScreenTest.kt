@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.maanit.stableshare.StableShareApp
 import com.maanit.stableshare.ui.LocalAppContainer
@@ -62,7 +63,7 @@ class UploadScreenTest {
         compose.onNodeWithText("No file yet").assertExists()
         compose.onNodeWithTag("upload-button").assertIsNotEnabled()
 
-        compose.onNodeWithText("50 MB").performClick()
+        compose.onNodeWithText("50 MB").performScrollTo().performClick()
         compose.waitUntil(5_000) { halfway.isCompleted }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Generating test file, 50%").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("upload-button").assertIsNotEnabled()

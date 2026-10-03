@@ -12,11 +12,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,9 +31,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Upload
@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,6 +56,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
@@ -161,7 +163,8 @@ fun UploadScreen(vm: UploadViewModel, onBack: () -> Unit, onOpenDetail: (String)
     var padCenter by remember { mutableStateOf<Offset?>(null) }
 
     val ready = selection as? Selection.Ready
-    val listState = rememberLazyListState()
+    val scroll = rememberScrollState()
+    var viewport by remember { mutableStateOf(Rect.Zero) }
     val reducedNow by rememberUpdatedState(reduced)
     // Derived so that only the threshold crossings recompose the screen, not every frame.
     val hover by remember {
@@ -255,67 +258,79 @@ fun UploadScreen(vm: UploadViewModel, onBack: () -> Unit, onOpenDetail: (String)
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.cd_back), tint = Neutral.colors.inkPrimary, modifier = Modifier.size(24.dp))
                 }
             }
-            Column(Modifier.padding(horizontal = 24.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.upload_title), style = Neutral.type.title, modifier = Modifier.weight(1f))
-                    CountPill(stringResource(R.string.upload_in_queue), heldCount ?: inQueue)
+            // Everything between the top bar and the launch pad scrolls, so short screens and large
+            // font scales stay usable; the launch pad and button stay pinned at the bottom.
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { viewport = it.boundsInRoot() }
+                    .verticalScroll(scroll),
+            ) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.upload_title), style = Neutral.type.title, modifier = Modifier.weight(1f))
+                        CountPill(stringResource(R.string.upload_in_queue), heldCount ?: inQueue)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(stringResource(R.string.upload_subtitle), style = Neutral.type.subtitle)
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.upload_subtitle), style = Neutral.type.subtitle)
-            }
-            Spacer(Modifier.height(20.dp))
-            DropZone(
-                width = cardWidth,
-                selected = ready != null,
-                hover = hover,
-                enabled = !throwing,
-                onClick = { picker.launch(arrayOf("*/*")) },
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .onGloballyPositioned { cardBounds = it.boundsInRoot() },
-            )
-            // The net hangs 72 dp below the card; the test files start 16 dp below the net.
-            Spacer(Modifier.height(NET_H - BACKBOARD_LIFT + 16.dp))
-            Column(Modifier.padding(horizontal = 24.dp)) {
-                Text(stringResource(R.string.test_files_label), style = Neutral.type.small)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        50 to R.string.test_file_50,
-                        200 to R.string.test_file_200,
-                        500 to R.string.test_file_500,
-                        1024 to R.string.test_file_1024,
-                    ).forEach { (mb, label) ->
-                        ActionChip(stringResource(label), onClick = { vm.generate(mb) }, enabled = !throwing)
+                Spacer(Modifier.height(20.dp))
+                DropZone(
+                    width = cardWidth,
+                    selected = ready != null,
+                    hover = hover,
+                    enabled = !throwing,
+                    onClick = { picker.launch(arrayOf("*/*")) },
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .onGloballyPositioned { cardBounds = it.boundsInRoot() },
+                )
+                // The net hangs 72 dp below the card; the test files start 16 dp below the net.
+                Spacer(Modifier.height(NET_H - BACKBOARD_LIFT + 16.dp))
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Text(stringResource(R.string.test_files_label), style = Neutral.type.small)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            50 to R.string.test_file_50,
+                            200 to R.string.test_file_200,
+                            500 to R.string.test_file_500,
+                            1024 to R.string.test_file_1024,
+                        ).forEach { (mb, label) ->
+                            ActionChip(stringResource(label), onClick = { vm.generate(mb) }, enabled = !throwing)
+                        }
                     }
                 }
-            }
-            Spacer(Modifier.height(12.dp))
-            // A revealed row is inserted at the top; keep the top in view so it slides in visibly.
-            LaunchedEffect(rows.firstOrNull()?.item?.id) {
-                if (rows.firstOrNull()?.item?.id == justRevealed) listState.scrollToItem(0)
-            }
-            LazyColumn(
-                Modifier.weight(1f).fillMaxWidth(),
-                state = listState,
-                contentPadding = PaddingValues(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(rows, key = { it.item.id }) { row ->
-                    val rise = remember { Animatable(if (row.item.id == justRevealed && !reduced) 1f else 0f) }
-                    LaunchedEffect(Unit) { rise.animateTo(0f, Motion.standard()) }
-                    TransferRow(
-                        row.item,
-                        generated = row.generated,
-                        onOpen = { onOpenDetail(row.item.id) },
-                        onAction = { action ->
-                            if (action == TransferAction.CANCEL) cancelTarget = row.item else perform(row.item.id, action)
-                        },
-                        modifier = Modifier.graphicsLayer {
-                            translationY = rise.value * 16.dp.toPx()
-                            alpha = 1f - rise.value
-                        },
-                    )
+                Spacer(Modifier.height(20.dp))
+                // Rows added this visit, newest first; a visit adds only a handful.
+                Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    rows.forEach { row ->
+                        key(row.item.id) {
+                            val isNew = row.item.id == justRevealed
+                            val rise = remember { Animatable(if (isNew && !reduced) 1f else 0f) }
+                            val bringIntoView = remember { BringIntoViewRequester() }
+                            LaunchedEffect(Unit) {
+                                if (isNew) bringIntoView.bringIntoView()
+                                rise.animateTo(0f, Motion.standard())
+                            }
+                            TransferRow(
+                                row.item,
+                                generated = row.generated,
+                                onOpen = { onOpenDetail(row.item.id) },
+                                onAction = { action ->
+                                    if (action == TransferAction.CANCEL) cancelTarget = row.item else perform(row.item.id, action)
+                                },
+                                modifier = Modifier
+                                    .bringIntoViewRequester(bringIntoView)
+                                    .graphicsLayer {
+                                        translationY = rise.value * 16.dp.toPx()
+                                        alpha = 1f - rise.value
+                                    },
+                            )
+                        }
+                    }
                 }
+                Spacer(Modifier.height(12.dp))
             }
             Spacer(Modifier.height(12.dp))
             LaunchPad(
@@ -342,7 +357,9 @@ fun UploadScreen(vm: UploadViewModel, onBack: () -> Unit, onOpenDetail: (String)
         // Overlay 1: trail dots and the flying chip (between the card and the net).
         plan?.let { p -> FlyingChip(p, clock, reduced) }
         // Overlay 2: rim, net and "+1", always above the chip.
-        cardBounds?.let { card -> Hoop(card.translate(-overlayOrigin), clock, reduced = reduced, plusOneVisible = plan != null) }
+        cardBounds?.let { card ->
+            Hoop(card.translate(-overlayOrigin), viewport.translate(-overlayOrigin), clock, reduced = reduced, plusOneVisible = plan != null)
+        }
     }
 
     cancelTarget?.let { target ->
@@ -523,10 +540,11 @@ private fun chipPose(plan: ThrowPlan, t: Float, reduced: Boolean, fallPx: Float)
 
 /** Rim (B.9), net (B.10) and "+1" (B.11): overlay layer 2, drawn above the flying chip. */
 @Composable
-private fun Hoop(card: Rect, clock: Animatable<Float, *>, reduced: Boolean, plusOneVisible: Boolean) {
+private fun Hoop(card: Rect, viewport: Rect, clock: Animatable<Float, *>, reduced: Boolean, plusOneVisible: Boolean) {
     val c = Neutral.colors
     val t = if (plusOneVisible) clock.value else -1f
-    Canvas(Modifier.fillMaxSize()) {
+    // Clipped to the scrolling area, so the hoop never draws over the top bar or the launch pad.
+    Canvas(Modifier.fillMaxSize()) { clipRect(viewport.left, viewport.top, viewport.right, viewport.bottom) {
         val rimY = card.bottom - BACKBOARD_LIFT.toPx()
         val cx = card.center.x
         drawNet(cx, rimY, c.net)
@@ -536,7 +554,7 @@ private fun Hoop(card: Rect, clock: Animatable<Float, *>, reduced: Boolean, plus
             val h = RIM_H.toPx()
             drawOval(c.accent, topLeft = Offset(cx - w / 2, rimY - h / 2), size = Size(w, h), style = Stroke(4.dp.toPx()))
         }
-    }
+    } }
     if (!plusOneVisible || t < 0f) return
     val start = if (reduced) Throw.REDUCED_FADE else Throw.PLUS_ONE
     val p = t - start
