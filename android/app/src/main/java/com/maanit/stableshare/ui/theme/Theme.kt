@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.material3.Typography as M3Typography
 
 private val mintColors = MintColors()
@@ -64,20 +66,24 @@ fun StableShareTheme(
     ) {
         MaterialTheme(
             colorScheme = scheme,
+            // Material components colour their own text, so these styles carry no colour.
             typography = M3Typography(
-                bodyLarge = DefaultNeutral.type.subtitle,
-                bodyMedium = body,
-                bodySmall = DefaultNeutral.type.meta,
-                titleLarge = DefaultNeutral.type.heading,
-                titleMedium = DefaultNeutral.type.rowTitle,
-                labelLarge = DefaultNeutral.type.button,
-                labelMedium = DefaultNeutral.type.small,
-                labelSmall = DefaultNeutral.type.small,
+                bodyLarge = DefaultNeutral.type.subtitle.uncoloured(),
+                bodyMedium = body.uncoloured(),
+                bodySmall = DefaultNeutral.type.meta.uncoloured(),
+                titleLarge = DefaultNeutral.type.heading.uncoloured(),
+                titleMedium = DefaultNeutral.type.rowTitle.uncoloured(),
+                labelLarge = DefaultNeutral.type.button.uncoloured(),
+                labelMedium = DefaultNeutral.type.small.uncoloured(),
+                labelSmall = DefaultNeutral.type.small.uncoloured(),
+                headlineSmall = DefaultNeutral.type.heading.uncoloured(),
             ),
             content = content,
         )
     }
 }
+
+private fun TextStyle.uncoloured() = copy(color = Color.Unspecified)
 
 /** Short accessors: `Mint.colors.bg`, `Neutral.type.title`. */
 object Mint {

@@ -213,6 +213,14 @@ class FileStoreTest {
     // ---- generated files ----
 
     @Test
+    fun generatedFilesAreRecognised() = runBlocking {
+        val file = store.generateTestFile(1, seed = 1)
+        assertTrue(store.isGeneratedFile(android.net.Uri.fromFile(file).toString()))
+        assertFalse(store.isGeneratedFile(android.net.Uri.fromFile(File(downloads, file.name)).toString()))
+        assertFalse(store.isGeneratedFile("content://com.example/doc/1"))
+    }
+
+    @Test
     fun generateTestFileHasRequestedSize() = runBlocking {
         val file = store.generateTestFile(3, seed = 42)
         assertEquals(3L * FileStore.MIB, file.length())

@@ -248,6 +248,14 @@ open class FileStore(
 
     // ---- generated test files ----
 
+    /** True if [uri] points at a test file this app generated (shown as "BIN" / "Generated test file"). */
+    fun isGeneratedFile(uri: String): Boolean {
+        val parsed = Uri.parse(uri)
+        if (parsed.scheme != "file") return false
+        val path = parsed.path ?: return false
+        return File(path).canonicalFile.parentFile == generatedDir.canonicalFile
+    }
+
     /** Writes [sizeMb] MiB of pseudo-random bytes; a cancelled or failed run leaves no file. */
     suspend fun generateTestFile(
         sizeMb: Int,

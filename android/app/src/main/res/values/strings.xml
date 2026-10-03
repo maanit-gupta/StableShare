@@ -41,6 +41,8 @@
     <string name="cd_open_transfer_settings">Open transfer settings</string>
     <string name="state_expanded">Expanded</string>
     <string name="state_collapsed">Collapsed</string>
+    <!-- §10: progress state description, e.g. "Uploading, 42 percent" -->
+    <string name="progress_state_description">%1$s, %2$d percent</string>
 
     <!-- §5.4 Transfers -->
     <string name="transfers_title">Transfers</string>
