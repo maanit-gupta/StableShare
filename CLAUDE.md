@@ -100,6 +100,10 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-03 — Engine tests run under runTest (virtual time) while Room runs on its own threads, so virtual time can jump ahead while a query is pending; tests synchronise with gates/flows, never timestamps. Process death is simulated by freezing the engine's only thread.
 - 2026-10-03 — Chaos run: adb root unavailable (google_apis_playstore image); used `adb shell run-as com.maanit.stableshare kill -9 <pid>` (real SIGKILL from the app uid).
 
+- 2026-10-03 — Phase 4 answers (user): ACCESS_LOCAL_NETWORK asked with POST_NOTIFICATIONS on Get started/Skip and once per process on Transfers; release kill test on a rootable google_apis_ps16k AVD `Pixel_9_root`; download-sheet manifest failure reverts the button + "Couldn't add {name}. {reason}"; Activity hides QUEUED-from-RETRYING/TRANSFERRING/VERIFYING; slider labels "Latency/Jitter/Bandwidth/Error rate/Timeout rate/Mid-transfer drop rate/Lost response rate/Corruption rate"; a11y labels Back/More options/Copy {field}/Open transfer settings/Expanded-Collapsed; licences = simple Neutral screen; onboarding page 3 waves on a loop.
+- 2026-10-03 — Engine bug fixed: OkHttp pool now evicts idle connections at 4 s (< Node's 5 s keep-alive); stale sockets made the first GET after idle fail with retries off. Regression test in ProtocolClientTest.
+- 2026-10-03 — Upload screen scrolls between the top bar and the pinned launch pad (short screens / 200% font); hoop overlay clipped to the scroll viewport.
+
 ## Open issues (append; remove when resolved)
 - Server disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem). Android DISK_FULL is tested.
 - Not yet pushed to the GitHub remote (origin is configured). Phase 2 is on phase-2-android-foundation, Phase 3 on phase-3-transfer-engine (stacked; neither merged to main).
@@ -109,3 +113,4 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - Crash between finalizePart and setLocalUri re-downloads the file (the verified copy is left orphaned); a cancel whose cleanup is cut short by process death leaves a server session (expires in 24 h) or a local file.
 - REMOTE_FILE_CHANGED manual retry reuses the stored ETag and fails again; Phase 4 should offer "download again" (new manifest).
 - After kill -9, resumption took ~18 s on API 37 (WorkManager stops its stale run on restart; the 15 s backstop wake-up / reschedule restarts it). Generated test files are never deleted.
+- PHASE 4 IN PROGRESS (branch phase-4-ui). Done: theme, assets, mascot, components, model + tests, splash, onboarding, shell, Transfers, chooser, download sheet, detail, upload hoop, history (222 JVM tests green). Remaining: Settings screen (SettingsViewModel committed, screen + route not yet; tapping the Settings tab crashes until the route exists), licences screen, notifications restyle + result notifier (5.12), concurrency-segment Compose test, detail chunk-map summary test, delete ui/debug, keystore.properties (missing) + R8 rules + release smoke on Pixel_9_root, screenshots, README, DESIGN.md sync, final report.
