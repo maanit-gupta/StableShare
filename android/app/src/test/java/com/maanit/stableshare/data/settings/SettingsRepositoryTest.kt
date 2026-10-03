@@ -44,7 +44,15 @@ class SettingsRepositoryTest {
 
     @Test
     fun defaults() = runBlocking {
-        assertEquals(Settings("http://10.0.2.2:8080", 2, 2 * mib, true), repo.current())
+        assertEquals(Settings("http://10.0.2.2:8080", 2, 2 * mib, true, onboardingCompleted = false), repo.current())
+    }
+
+    @Test
+    fun onboardingFlagPersistsAndCanBeReset() = runBlocking {
+        repo.setOnboardingCompleted(true)
+        assertTrue(SettingsRepository(store).current().onboardingCompleted)
+        repo.setOnboardingCompleted(false)
+        assertFalse(repo.current().onboardingCompleted)
     }
 
     @Test

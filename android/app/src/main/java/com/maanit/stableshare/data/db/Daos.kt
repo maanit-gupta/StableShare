@@ -96,6 +96,9 @@ abstract class TransferDao {
 
     @Query("DELETE FROM transfers WHERE id = :id AND state IN ('COMPLETED', 'CANCELLED')")
     internal abstract suspend fun deleteIfTerminal(id: String): Int
+
+    @Query("DELETE FROM transfers WHERE state IN ('COMPLETED', 'CANCELLED')")
+    internal abstract suspend fun deleteAllTerminal(): Int
 }
 
 @Dao

@@ -325,4 +325,39 @@ class ProtocolClientTest {
         prefixed.health()
         assertEquals("/proxy/health", server.takeRequest().target)
     }
+
+    @Test
+    fun adminFaultsRoundTripSendsEveryFieldButTheSeed() = runBlocking {
+        val config = """{"enabled":true,"seed":1,"latencyMs":200,"latencyJitterMs":100,"bandwidthKbps":0,""" +
+            """"errorRate":0.15,"timeoutRate":0.03,"dropMidBodyRate":0.05,"dropAfterProcessRate":0,"corruptRate":0}"""
+        server.enqueue(json(200, config))
+        server.enqueue(json(200, config))
+        val got = client.getFaults()
+        assertEquals(FaultSettings(true, 200, 100, 0, 0.15, 0.03, 0.05, 0.0, 0.0), got)
+        assertEquals("/admin/faults", server.takeRequest().target)
+
+        client.putFaults(got.copy(enabled = false))
+        val put = server.takeRequest()
+        assertEquals("PUT", put.method)
+        val body = Json.parseToJsonElement(put.body!!.utf8()).jsonObject
+        assertEquals(
+            setOf("enabled", "latencyMs", "latencyJitterMs", "bandwidthKbps", "errorRate", "timeoutRate",
+                "dropMidBodyRate", "dropAfterProcessRate", "corruptRate"),
+            body.keys,
+        )
+        assertEquals("false", body.getValue("enabled").jsonPrimitive.content)
+    }
+
+    @Test
+    fun adminResetAndStats() = runBlocking {
+        server.enqueue(json(200, """{"enabled":false,"seed":1,"latencyMs":0,"latencyJitterMs":0,"bandwidthKbps":0,"errorRate":0,"timeoutRate":0,"dropMidBodyRate":0,"dropAfterProcessRate":0,"corruptRate":0}"""))
+        server.enqueue(json(200, """{"requests":12,"apiRequests":9,"faults":{"latency":3,"error":2,"timeout":1,"dropMidBody":4,"dropAfterProcess":5,"corrupt":6},"dedupedChunks":7}"""))
+        assertFalse(client.resetFaults().enabled)
+        val reset = server.takeRequest()
+        assertEquals("POST", reset.method)
+        assertEquals("/admin/faults/reset", reset.target)
+        val stats = client.getStats()
+        assertEquals(ServerStats(12, 9, FaultCounts(3, 2, 1, 4, 5, 6), 7), stats)
+        assertEquals("/admin/stats", server.takeRequest().target)
+    }
 }

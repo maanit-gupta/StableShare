@@ -19,6 +19,8 @@ data class Settings(
     /** Chunk size for new uploads (and download manifests); existing transfers keep theirs. */
     val uploadChunkSizeBytes: Int = SettingsRepository.DEFAULT_CHUNK_SIZE,
     val autoRetryEnabled: Boolean = true,
+    /** Set once the first-run intro was finished or skipped (UI-SPEC §5.2). */
+    val onboardingCompleted: Boolean = false,
 )
 
 /** User settings in DataStore. Values are validated on write and sanitised again on read. */
@@ -33,6 +35,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
                 uploadChunkSizeBytes = prefs[KEY_CHUNK_SIZE]?.takeIf { it in ALLOWED_CHUNK_SIZES }
                     ?: DEFAULT_CHUNK_SIZE,
                 autoRetryEnabled = prefs[KEY_AUTO_RETRY] ?: true,
+                onboardingCompleted = prefs[KEY_ONBOARDING_COMPLETED] ?: false,
             )
         }
         .distinctUntilChanged()
@@ -60,6 +63,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[KEY_AUTO_RETRY] = enabled }
     }
 
+    suspend fun setOnboardingCompleted(completed: Boolean) {
+        store.edit { it[KEY_ONBOARDING_COMPLETED] = completed }
+    }
+
     companion object {
         const val DEFAULT_SERVER_URL = "http://10.0.2.2:8080"
         const val MIN_CONCURRENT = 1
@@ -73,6 +80,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         private val KEY_MAX_CONCURRENT = intPreferencesKey("max_concurrent")
         private val KEY_CHUNK_SIZE = intPreferencesKey("upload_chunk_size_bytes")
         private val KEY_AUTO_RETRY = booleanPreferencesKey("auto_retry_enabled")
+        private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
 
         /** Trims, adds http:// when no scheme is given, drops a trailing slash; null if invalid. */
         fun normalizeServerUrl(input: String): String? {

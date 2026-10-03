@@ -369,6 +369,9 @@ class TransferRepository(
     /** Deletes a COMPLETED or CANCELLED transfer (chunks and events cascade). */
     suspend fun deleteTransfer(id: String): Boolean = transfers.deleteIfTerminal(id) > 0
 
+    /** History's "Clear all": deletes every COMPLETED and CANCELLED transfer; returns how many. */
+    suspend fun clearHistory(): Int = transfers.deleteAllTerminal()
+
     private companion object {
         /** Stays under SQLite's 999 bound-variable limit on older Android versions. */
         const val SQL_BATCH = 500

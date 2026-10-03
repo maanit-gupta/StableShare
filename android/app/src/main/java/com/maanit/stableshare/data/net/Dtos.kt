@@ -101,3 +101,39 @@ data class ErrorBody(
 
 @Serializable
 data class Health(val ok: Boolean)
+
+/**
+ * The mock server's fault configuration (DESIGN.md §3.3), minus the PRNG seed, which the app
+ * never changes. Every field is required, so a PUT always sends the whole set.
+ */
+@Serializable
+data class FaultSettings(
+    val enabled: Boolean,
+    val latencyMs: Int,
+    val latencyJitterMs: Int,
+    val bandwidthKbps: Int,
+    val errorRate: Double,
+    val timeoutRate: Double,
+    val dropMidBodyRate: Double,
+    val dropAfterProcessRate: Double,
+    val corruptRate: Double,
+)
+
+@Serializable
+data class FaultCounts(
+    val latency: Long = 0,
+    val error: Long = 0,
+    val timeout: Long = 0,
+    val dropMidBody: Long = 0,
+    val dropAfterProcess: Long = 0,
+    val corrupt: Long = 0,
+)
+
+/** GET /admin/stats. */
+@Serializable
+data class ServerStats(
+    val requests: Long = 0,
+    val apiRequests: Long = 0,
+    val faults: FaultCounts = FaultCounts(),
+    val dedupedChunks: Long = 0,
+)

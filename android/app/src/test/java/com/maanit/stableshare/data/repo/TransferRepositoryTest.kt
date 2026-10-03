@@ -475,6 +475,21 @@ class TransferRepositoryTest {
         assertNotNull(repo.getTransfer(active))
     }
 
+    @Test
+    fun clearHistoryDeletesOnlyTerminalRows() = runBlocking {
+        val queued = upload()
+        val paused = upload().also { moveTo(it, PAUSED) }
+        val failed = upload().also { moveTo(it, TRANSFERRING, FAILED) }
+        val cancelled = upload().also { moveTo(it, CANCELLED) }
+        val cancelledToo = upload().also { moveTo(it, TRANSFERRING, CANCELLED) }
+
+        assertEquals(2, repo.clearHistory())
+        assertNull(repo.getTransfer(cancelled))
+        assertNull(repo.getTransfer(cancelledToo))
+        listOf(queued, paused, failed).forEach { assertNotNull(repo.getTransfer(it)) }
+        assertEquals(0, repo.clearHistory())
+    }
+
     // ---- observation ----
 
     @Test

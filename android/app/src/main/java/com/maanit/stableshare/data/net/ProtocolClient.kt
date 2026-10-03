@@ -126,6 +126,20 @@ class ProtocolClient(
 
     suspend fun health(): Health = send(Request.Builder().url(url("health")).get()) { decode(it) }
 
+    // ---- admin (the network simulator in Settings; never faulted by the server) ----
+
+    suspend fun getFaults(): FaultSettings = send(Request.Builder().url(url("admin", "faults")).get()) { decode(it) }
+
+    suspend fun putFaults(settings: FaultSettings): FaultSettings = send(
+        Request.Builder().url(url("admin", "faults")).put(json.encodeToString(settings).toRequestBody(JSON)),
+    ) { decode(it) }
+
+    suspend fun resetFaults(): FaultSettings = send(
+        Request.Builder().url(url("admin", "faults", "reset")).post(ByteArray(0).toRequestBody(null)),
+    ) { decode(it) }
+
+    suspend fun getStats(): ServerStats = send(Request.Builder().url(url("admin", "stats")).get()) { decode(it) }
+
     // ---- plumbing ----
 
     private suspend fun url(vararg segments: String): HttpUrl {
