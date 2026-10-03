@@ -1,5 +1,6 @@
 package com.maanit.stableshare.ui.detail
 
+import android.content.ClipData
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -37,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -48,7 +50,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -56,7 +59,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -72,6 +74,7 @@ import com.maanit.stableshare.ui.model.text
 import com.maanit.stableshare.ui.theme.LocalReducedMotion
 import com.maanit.stableshare.ui.theme.Mint
 import com.maanit.stableshare.ui.theme.Motion
+import kotlinx.coroutines.launch
 import kotlin.math.ceil
 
 private val CardShape = RoundedCornerShape(10.dp)
@@ -324,8 +327,9 @@ private fun DetailRows(ui: DetailUi) {
 
 @Composable
 private fun Field(label: String, value: String, mono: Boolean = false, copy: Boolean = false) {
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(label, style = startCaption)
@@ -337,7 +341,7 @@ private fun Field(label: String, value: String, mono: Boolean = false, copy: Boo
         }
         if (copy) {
             IconButton(onClick = {
-                clipboard.setText(AnnotatedString(value))
+                scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(label, value))) }
                 copiedToast(context)
             }) {
                 Icon(Icons.Outlined.ContentCopy, stringResource(R.string.cd_copy, label), tint = Mint.colors.stroke, modifier = Modifier.size(20.dp))

@@ -262,6 +262,3 @@ fun NeutralSnackbarHost(state: SnackbarHostState, modifier: Modifier = Modifier)
         }
     }
 }
-
-/** Horizontal arrangement helper for rows of chips that wrap. */
-val ChipSpacing = Arrangement.spacedBy(8.dp)

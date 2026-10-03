@@ -26,7 +26,6 @@ object Motion {
     fun <T> quick(): FiniteAnimationSpec<T> = tween(QUICK_MS, easing = FastOutSlowInEasing)
     fun <T> standard(): FiniteAnimationSpec<T> = tween(STANDARD_MS, easing = FastOutSlowInEasing)
     fun <T> emphasis(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.7f, stiffness = 300f)
-    fun <T> long(): FiniteAnimationSpec<T> = tween(LONG_MS, easing = FastOutSlowInEasing)
 }
 
 /**
