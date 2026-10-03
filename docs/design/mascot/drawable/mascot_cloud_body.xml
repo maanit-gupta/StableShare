@@ -1,0 +1,50 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp"
+    android:height="200dp"
+    android:viewportWidth="240"
+    android:viewportHeight="200">
+    <path
+        android:fillColor="#FF12201C"
+        android:strokeColor="#FF12201C"
+        android:strokeWidth="8"
+        android:strokeLineJoin="round"
+        android:pathData="M34 114a38 38 0 1 0 76 0 38 38 0 1 0-76 0Z"/>
+    <path
+        android:fillColor="#FF12201C"
+        android:strokeColor="#FF12201C"
+        android:strokeWidth="8"
+        android:strokeLineJoin="round"
+        android:pathData="M72 86a52 52 0 1 0 104 0 52 52 0 1 0-104 0Z"/>
+    <path
+        android:fillColor="#FF12201C"
+        android:strokeColor="#FF12201C"
+        android:strokeWidth="8"
+        android:strokeLineJoin="round"
+        android:pathData="M139 110a38 38 0 1 0 76 0 38 38 0 1 0-76 0Z"/>
+    <path
+        android:fillColor="#FF12201C"
+        android:strokeColor="#FF12201C"
+        android:strokeWidth="8"
+        android:strokeLineJoin="round"
+        android:pathData="M69 104H183a27 27 0 0 1 27 27V131a27 27 0 0 1-27 27H69a27 27 0 0 1-27-27V131a27 27 0 0 1 27-27Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M34 114a38 38 0 1 0 76 0 38 38 0 1 0-76 0Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M72 86a52 52 0 1 0 104 0 52 52 0 1 0-104 0Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M139 110a38 38 0 1 0 76 0 38 38 0 1 0-76 0Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M69 104H183a27 27 0 0 1 27 27V131a27 27 0 0 1-27 27H69a27 27 0 0 1-27-27V131a27 27 0 0 1 27-27Z"/>
+    <path
+        android:fillColor="#FFDDFBE2"
+        android:pathData="M64 150Q126 166 190 150 190 156 183 157L69 157Q62 156 64 150Z"/>
+    <path
+        android:strokeColor="#FFDDFBE2"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M96 58Q108 46 124 44"/>
+</vector>

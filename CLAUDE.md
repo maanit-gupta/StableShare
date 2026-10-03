@@ -7,6 +7,7 @@ Repo: https://github.com/maanit-gupta/StableShare
 - This file: shared rules, current phase, decisions. Loaded every session.
 - `server/CLAUDE.md` and `android/CLAUDE.md`: folder-specific conventions, loaded when working there.
 - `docs/DESIGN.md`: the full design and source of truth. Read only the sections relevant to the task before planning. If implementation must deviate, update DESIGN.md in the same commit and log it under Decisions below.
+- `docs/UI-SPEC.md`: the UI source of truth. Read it before any UI work; never invent UI that isn't in it.
 
 ## Layout
 - `server/` Node mock server, tests, CLI client, chaos script
