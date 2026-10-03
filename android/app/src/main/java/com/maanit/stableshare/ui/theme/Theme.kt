@@ -1,58 +1,91 @@
 package com.maanit.stableshare.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.material3.Typography as M3Typography
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
+private val mintColors = MintColors()
+private val neutralColors = NeutralColors()
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+private val DefaultMint = MintTokens(mintColors, mintType(mintColors))
+private val DefaultNeutral = NeutralTokens(neutralColors, neutralType(neutralColors))
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
+val LocalMintTokens = staticCompositionLocalOf { DefaultMint }
+val LocalNeutralTokens = staticCompositionLocalOf { DefaultNeutral }
 
+/**
+ * The two locked token sets (UI-SPEC §1, §3): light only, no dynamic colour. Material 3
+ * components that are used directly (sheets, switches, text fields) get a scheme built from the
+ * Neutral tokens, because every dialog and sheet is Neutral.
+ */
 @Composable
 fun StableShareTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    reducedMotion: Boolean = rememberSystemReducedMotion(),
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
+    val n = neutralColors
+    val scheme = lightColorScheme(
+        primary = n.inkPrimary,
+        onPrimary = n.white,
+        primaryContainer = n.accentTint,
+        onPrimaryContainer = n.inkPrimary,
+        secondary = n.inkSecondary,
+        onSecondary = n.white,
+        secondaryContainer = n.accentTint,
+        onSecondaryContainer = n.inkPrimary,
+        background = n.page,
+        onBackground = n.inkPrimary,
+        surface = n.card,
+        onSurface = n.inkPrimary,
+        surfaceVariant = n.pill,
+        onSurfaceVariant = n.inkSecondary,
+        surfaceContainerLowest = n.card,
+        surfaceContainerLow = n.card,
+        surfaceContainer = n.card,
+        surfaceContainerHigh = n.card,
+        surfaceContainerHighest = n.pill,
+        outline = n.border,
+        outlineVariant = n.track,
+        error = n.danger,
+        onError = n.white,
+        inverseSurface = n.inkPrimary,
+        inverseOnSurface = n.white,
+        inversePrimary = n.accent,
     )
+    val body = DefaultNeutral.type.body
+    CompositionLocalProvider(
+        LocalMintTokens provides DefaultMint,
+        LocalNeutralTokens provides DefaultNeutral,
+        LocalReducedMotion provides reducedMotion,
+    ) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = M3Typography(
+                bodyLarge = DefaultNeutral.type.subtitle,
+                bodyMedium = body,
+                bodySmall = DefaultNeutral.type.meta,
+                titleLarge = DefaultNeutral.type.heading,
+                titleMedium = DefaultNeutral.type.rowTitle,
+                labelLarge = DefaultNeutral.type.button,
+                labelMedium = DefaultNeutral.type.small,
+                labelSmall = DefaultNeutral.type.small,
+            ),
+            content = content,
+        )
+    }
+}
+
+/** Short accessors: `Mint.colors.bg`, `Neutral.type.title`. */
+object Mint {
+    val colors: MintColors @Composable @ReadOnlyComposable get() = LocalMintTokens.current.colors
+    val type: MintType @Composable @ReadOnlyComposable get() = LocalMintTokens.current.type
+}
+
+object Neutral {
+    val colors: NeutralColors @Composable @ReadOnlyComposable get() = LocalNeutralTokens.current.colors
+    val type: NeutralType @Composable @ReadOnlyComposable get() = LocalNeutralTokens.current.type
 }
