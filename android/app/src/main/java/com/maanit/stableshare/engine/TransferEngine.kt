@@ -173,7 +173,9 @@ class TransferEngine(
         val usable = connectivity.usableNetwork.value
         val free = s.maxConcurrent - jobs.count { !it.value.isCompleted }
         if (free > 0 && usable) {
-            repo.claimNextQueued(free, exclude = jobs.keys).forEach { launchPipeline(pipelines, it, wake) }
+            // A snapshot: finishing jobs remove themselves from another thread, and a live key view
+            // can shrink between Kotlin's size check and iterator().next() (NoSuchElementException).
+            repo.claimNextQueued(free, exclude = HashSet(jobs.keys)).forEach { launchPipeline(pipelines, it, wake) }
         }
         publishActive()
 
