@@ -44,6 +44,8 @@ class ParallelChunksBenchmark {
             c.settingsRepository.setParallelChunks(n)
             c.settingsRepository.setWifiOnly(false)
             c.settingsRepository.setAutoRetryEnabled(true)
+            // Start from an idle engine: a transfer left over from an interrupted run would share the link.
+            c.transferRepository.getInStates(*ACTIVE_OR_WAITING).forEach { c.transferController.cancel(it.id) }
         }
         // Keep the app in the foreground, as a user watching a transfer would.
         ActivityScenario.launch(MainActivity::class.java).use {
@@ -87,5 +89,10 @@ class ParallelChunksBenchmark {
                 else -> delay(100)
             }
         }
+    }
+
+    private companion object {
+        /** States that can use the link; paused and failed transfers are left alone. */
+        val ACTIVE_OR_WAITING = arrayOf(TransferState.QUEUED, TransferState.TRANSFERRING, TransferState.RETRYING, TransferState.VERIFYING)
     }
 }

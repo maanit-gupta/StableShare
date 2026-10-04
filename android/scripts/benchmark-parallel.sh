@@ -21,7 +21,8 @@ PKG=com.maanit.stableshare
 ./gradlew -q installDebug installDebugAndroidTest
 
 faults() { curl -sf -X PUT -H 'Content-Type: application/json' -d "$1" "$SERVER/admin/faults" > /dev/null; }
-OFF='{"enabled":false}'
+# The server throttles whenever bandwidthKbps > 0, even with enabled = false, so "off" zeroes every value.
+OFF='{"enabled":false,"latencyMs":0,"latencyJitterMs":0,"bandwidthKbps":0,"errorRate":0,"timeoutRate":0,"dropMidBodyRate":0,"dropAfterProcessRate":0,"corruptRate":0}'
 SLOW='{"enabled":true,"latencyMs":800,"latencyJitterMs":400,"bandwidthKbps":512,"errorRate":0,"timeoutRate":0,"dropMidBodyRate":0,"dropAfterProcessRate":0,"corruptRate":0}'
 
 mkdir -p "$(dirname "$OUT")"
