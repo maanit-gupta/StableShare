@@ -8,7 +8,7 @@ StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads 
 |---|---|---|---|
 | ![Transfers](docs/screenshots/05-transfers-active.png) | ![Detail](docs/screenshots/07-detail-transferring.png) | ![History](docs/screenshots/11-history.png) | ![Settings](docs/screenshots/12-settings.png) |
 
-**Download:** [StableShare-1.1.0.apk](release/StableShare-1.1.0.apk) (3 807 237 bytes, v2-signed), SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0` ([CHECKSUMS.txt](release/CHECKSUMS.txt)).
+**Download:** [StableShare-1.1.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk) from the [v1.1.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.1.0) (3 807 237 bytes, v2-signed; also in [release/](release/StableShare-1.1.0.apk)), SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0` ([CHECKSUMS.txt](release/CHECKSUMS.txt)).
 
 The full design is in [docs/DESIGN.md](docs/DESIGN.md) and the UI spec is in [docs/UI-SPEC.md](docs/UI-SPEC.md).
 

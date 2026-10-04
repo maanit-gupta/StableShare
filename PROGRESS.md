@@ -1,4 +1,4 @@
-NEXT STEP: F2
+NEXT STEP: none
 # StableShare — Progress
 
 Updated by Claude Code at the end of every session. Keep this file under 120 lines: when "Gotchas" grows past 15 lines, merge related items.
@@ -6,6 +6,8 @@ Updated by Claude Code at the end of every session. Keep this file under 120 lin
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a question · `[USER]` my step
 
 ## Resume here
+
+Submission ready: yes. Release v1.1.0 published, README live on main. Unanswered open questions below (6.3c defaults/timeout/server throttle) are optional follow-ups, documented in README Known limitations where user-visible.
 
 Scope reset: shipping path = A–F in `plan/FINAL-PHASES.md` (replaces plan files 6d, 7, 8, 9, 10). Next step: see the top line.
 Still open for the user: parallel-chunks default and the other 6.3c questions.
@@ -52,7 +54,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] E1 README sections 1–6 (2026-10-04: README rewritten in one pass, E1+E2 in one session per the user)
 - [x] E2 README sections 7–12 + final checks (334 lines; five headings exact; 86 relative links resolve; 35 Class.method test refs + all server test names grep-verified; endpoints checked against routes; Mermaid by eye; UIDT listed as an extra since step A kept it)
 - [x] F1 Push and release, items 1–3 (secrets check clean: keystore.properties/.jks ignored, never tracked; only >5 MB non-APK file = demo GIF 5.6 MB; CHANGELOG.md 1.1.0; pushed)
-- [ ] F2 Push and release, items 4–5
+- [x] F2 Push and release, items 4–5 (2026-10-04: CI run 37211742543 green; tag v1.1.0; https://github.com/maanit-gupta/StableShare/releases/tag/v1.1.0 with the APK; downloaded asset 3 807 237 bytes, sha256 b8e41794…51e4e0 = CHECKSUMS.txt; README Download line → release URL)
 
 ## Open questions
 
