@@ -117,6 +117,12 @@ Why each technology:
 - **Coroutines and Flow:** pause and cancel reach the socket through structured cancellation.
 - **Express 5:** one runtime dependency, and async handlers forward errors natively.
 
+How a transfer runs:
+- **One coordinator.** User actions call `ensureRunning`, which starts a host: unique WorkManager work `transfer-coordinator`, or the UIDT job for user-started transfers on Android 14+. [RunLease] makes sure only one [TransferEngine] loop runs per process.
+- **Slots.** The loop claims the oldest QUEUED rows in one transaction (`claimNextQueued`) and runs at most N pipelines at once (1–4, default 2). The limit is re-read on every pass, so raising it fills slots at once, and lowering it lets running transfers finish.
+- **Pieces.** Within a transfer, pieces go one at a time by default, or 1, 2 or 4 at once with the "Pieces at once" setting ([ChunkWorkers]).
+- **Pause, resume, cancel.** [TransferController] only changes the row's state. Pause is a CAS to PAUSED. On its next pass the engine cancels any pipeline whose row is no longer TRANSFERRING, RETRYING or VERIFYING, and coroutine cancellation aborts the in-flight OkHttp call. Resume is PAUSED → QUEUED. Uploads then re-sync from the server's received list, and downloads continue from the DONE pieces on disk. Cancel moves the row to CANCELLED first, then stops the job and deletes the server session or `.part` file under `NonCancellable`.
+
 ## Transfer protocol
 
 Checked against [uploads.js](server/src/routes/uploads.js), [files.js](server/src/routes/files.js), [admin.js](server/src/routes/admin.js) and [app.js](server/src/app.js). The full spec is in [DESIGN.md §3](docs/DESIGN.md#3-transfer-protocol). Errors are JSON `{error, message}`.
@@ -168,7 +174,41 @@ sequenceDiagram
 
 If a piece was not stored, the client resends it, and a racing duplicate gets `200 already_received`. A lost `complete` reply is handled the same way: the client checks status, and because `complete` is idempotent, calling it again is safe.
 
+A download:
+1. `GET /api/files/:id/manifest?chunkSize=` returns the size, SHA-256, ETag and every piece's offset, length and hash. The transfer and all its piece rows are created from it in one transaction (`TransferRepositoryTest.createDownloadCopiesManifestHashesAndEtag`).
+2. The pipeline creates a `<name>.<transferId>.part` file in the app's Downloads folder, after checking free space. On resume, it re-hashes the newest DONE pieces first.
+3. For each PENDING piece, `GET /content` with `Range: bytes=a-b` and `If-Range: <etag>`. The body must be a 206 with the exact length and hash. It is then written at its offset and fsynced, and only then marked DONE.
+4. In VERIFYING, the whole `.part` file is re-hashed and compared with the manifest's SHA-256. It is then moved to its final name, and the row becomes COMPLETED.
+
 ## Persistence strategy
+
+**State machine** ([StateMachine], [DESIGN.md §4](docs/DESIGN.md#4-state-machine)). Every row moves only along these edges. COMPLETED and CANCELLED are terminal: nothing, including restart reconciliation, can revive a cancelled transfer (`StateMachineTest.cancelledIsNeverRevived`).
+
+```mermaid
+stateDiagram-v2
+  [*] --> QUEUED
+  QUEUED --> TRANSFERRING
+  QUEUED --> PAUSED
+  TRANSFERRING --> VERIFYING
+  TRANSFERRING --> RETRYING
+  TRANSFERRING --> PAUSED
+  TRANSFERRING --> FAILED
+  TRANSFERRING --> QUEUED: restart or system stop
+  RETRYING --> TRANSFERRING
+  RETRYING --> QUEUED
+  RETRYING --> PAUSED
+  RETRYING --> FAILED
+  VERIFYING --> COMPLETED
+  VERIFYING --> RETRYING
+  VERIFYING --> FAILED
+  VERIFYING --> QUEUED: restart or system stop
+  PAUSED --> QUEUED: resume
+  FAILED --> QUEUED: manual retry, keeps progress
+  COMPLETED --> [*]
+  CANCELLED --> [*]
+```
+
+Every non-terminal state can also go to CANCELLED (left out of the diagram for clarity). The UI's buttons come from `StateMachine.allowedActions(state)`: Pause and Cancel while QUEUED, TRANSFERRING or RETRYING; only Cancel while VERIFYING; Resume on PAUSED; Retry on FAILED.
 
 - **Three Room tables** ([Entities], [schema](android/app/schemas)):
   - `transfers`: one row per transfer, with type, file, sizes, `state`, `bytesDone`, error code, `nextRetryAt`, ETag and expected SHA-256.
