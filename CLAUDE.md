@@ -59,6 +59,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - Start in plan mode; present a concise plan and wait for approval.
 - No stubs or TODOs for required features. If blocked, stop and say why.
 - Run the relevant tests and builds; fix until green. Never delete or weaken a test to pass.
+- Fuzz tests (`test/.../fuzz`, part of testDebugUnitTest): `./gradlew :app:testDebugUnitTest --tests '*fuzz*' -Pfuzz.seeds=2000` for a deep run, `-Pfuzz.seed=S` to replay a failure; add fixed seeds to `app/src/test/resources/fuzz-regressions.txt`.
 - Small commits with conventional prefixes (feat:, fix:, test:, docs:, chore:).
 - Finish with a report: what was built, how each requirement was verified (command + result), deviations, known limitations.
 - Before ending: update the Phase tracker and append to Decisions and Open issues below. Keep this file under 200 lines.
@@ -116,6 +117,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-04 — Wi-Fi only gates engine traffic only; user-started requests (health, Test connection, file list/manifest, simulator, cancel DELETE) still go out. Wi-Fi only counts as on until DataStore answers.
 - 2026-10-04 — Waiting rows are re-coded live (METERED_NETWORK ↔ NETWORK_UNAVAILABLE) by EngineBootstrap via recodeNetworkWaiters, which writes only errorCode/errorMessage plus an INFO event, never the state column.
 - 2026-10-04 — QUEUED rows while wifiOnly && network != Unmetered show "Waiting for Wi-Fi" (inkSecondary, Wi-Fi title/stats; QUEUED mascot/ring/plane) — user decision, UI-SPEC §6. DataStore key is `wifi_only` (snake_case like the others).
+- 2026-10-04 — Pipeline events go through `TransferRepository.logEventWhile(id, StateMachine.ACTIVE, …)` (state checked in the same transaction) — the engine fuzz found a RETRY_SCHEDULED log landing after a concurrent cancel. Controller cleanup logs stay unguarded.
 
 ## Open issues (append; remove when resolved)
 - Server disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem). Android DISK_FULL is tested.
