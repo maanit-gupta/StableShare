@@ -27,7 +27,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 6.3b Parallel chunks: engine [APPROVE] (2026-10-04: 4bfe6ff, 2587b46 + docs; 319 JVM tests green incl. 16 in `engine/ParallelChunksTest`; fuzz 2000 seeds green with N ∈ {1,2,4}; seed 1346 re-checked)
 - [x] 6.3c Parallel chunks: UI and benchmark (2026-10-04: c5b6918 UI, 90be639 test de-flake, c258804/0b68c71/0e57920 benchmark harness, cd598d7 docs; 325 JVM tests green ×2; benchmark on Pixel_9_root API 37, table in docs/benchmarks.md)
 - [x] 6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE] (`plan/6d-uidt.md`) (2026-10-04: approved variant = no new class, `TransferEngine.run` already is the loop; `RunLease` single-flight with rerun flag, 93c2c77; latent claim race fixed, 242f74e; 329 JVM tests green, fuzz 2000 green; DESIGN §9 "Hosts and the run lease")
-- [x] 6.4b UIDT: TransferJobService, scheduling, stop mapping (2026-10-04: see the commits below; 343 JVM tests green, fuzz 2000 green; `HostSelectingSchedulerTest`, `TransferJobHostTest`, pauseAll + notification action tests; no emulator run yet, that is 6.4c)
+- [x] 6.4b UIDT: TransferJobService, scheduling, stop mapping (2026-10-04: ea099a0 code, 7fbcbb3 docs; 343 JVM tests green, fuzz 2000 green; `HostSelectingSchedulerTest`, `TransferJobHostTest`, pauseAll + notification action tests; no emulator run yet, that is 6.4c)
 - [ ] 6.4c UIDT: emulator verification and docs
 
 ### Phase 7 — Evidence
