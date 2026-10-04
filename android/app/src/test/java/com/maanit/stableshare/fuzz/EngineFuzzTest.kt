@@ -84,6 +84,7 @@ class EngineFuzzTest {
     private data class Stats(
         var seeds: Int = 0, var transfers: Int = 0, var completed: Int = 0, var cancelled: Int = 0,
         var faults: Int = 0, var deaths: Int = 0, var actionsApplied: Int = 0, var completedAfterDeath: Int = 0,
+        var instantCompleted: Int = 0,
     )
 
     private val stats = Stats()
@@ -96,6 +97,10 @@ class EngineFuzzTest {
     private inner class Scenario(val seed: Long, val dir: File) {
         private val rnd = Random(seed)
         private val faultRnd = Random(seed * 7_919 + 1)
+        /** Picks identical re-uploads; separate from [rnd] so adding it did not reshuffle older seeds. */
+        private val reuseRnd = Random(seed * 104_729 + 3)
+        /** (size, content seed) of every upload so far, for identical re-uploads (instant upload). */
+        private val uploadContents = mutableListOf<Pair<Int, Int>>()
         private val context = ApplicationProvider.getApplicationContext<Context>()
         private val server = FakeTransferServer()
         private val net = FakeConnectivity()
@@ -181,6 +186,9 @@ class EngineFuzzTest {
                 stats.transfers += final.size
                 stats.completed += final.count { it == COMPLETED }
                 stats.cancelled += final.count { it == CANCELLED }
+                stats.instantCompleted += sources.keys.count { id ->
+                    process.h.state(id) == COMPLETED && process.h.eventTypes(id).contains(EventType.INSTANT_UPLOAD)
+                }
                 stats.deaths += deaths
                 if (deaths > 0) stats.completedAfterDeath += final.count { it == COMPLETED }
             } catch (t: Throwable) {
@@ -231,14 +239,25 @@ class EngineFuzzTest {
             val s = nextSeed++
             faultsOn = false // the user-started manifest fetch is not the engine's to retry
             val (t, bytes) = try {
-                if (rnd.nextBoolean()) p.h.upload(size, seed = s) else p.h.download(size, seed = s, fileId = "file-$s")
+                if (rnd.nextBoolean()) {
+                    // Now and then the same content again: instant when the earlier one is COMPLETED.
+                    val (upSize, upSeed) = if (uploadContents.isNotEmpty() && reuseRnd.nextInt(3) == 0) {
+                        uploadContents.random(reuseRnd)
+                    } else {
+                        size to s
+                    }
+                    uploadContents += upSize to upSeed
+                    p.h.upload(upSize, seed = upSeed, fileName = "src-$s-copy-of-$upSeed-$upSize.bin")
+                } else {
+                    p.h.download(size, seed = s, fileId = "file-$s")
+                }
             } finally {
                 faultsOn = true
             }
             sources[t.id] = Source(t.type, bytes)
             // Ids are random UUIDs; distinct createdAt keeps claim order (createdAt, id) seed-determined.
             delay(1)
-            log += "create ${t.type} ${t.id.take(8)} size=$size"
+            log += "create ${t.type} ${t.id.take(8)} size=${bytes.size}"
             p.ensureRunning()
         }
 

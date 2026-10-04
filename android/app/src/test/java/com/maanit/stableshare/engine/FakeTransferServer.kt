@@ -43,10 +43,11 @@ class FakeTransferServer : TransferApi {
         data object Corrupt : Fault
     }
 
-    class Session(val request: CreateSessionRequest, val instantOf: String? = null) {
+    /** [linked]: an instant session's copy of the original's bytes (the server's hard link), so deleting one never affects the other. */
+    class Session(val request: CreateSessionRequest, val linked: ByteArray? = null) {
         val chunks = ConcurrentHashMap<Int, ByteArray>()
         @Volatile var completedSha: String? = null
-        val instant: Boolean get() = instantOf != null
+        val instant: Boolean get() = linked != null
     }
 
     class Blob(val fileId: String, val name: String, @Volatile var bytes: ByteArray) {
@@ -110,7 +111,7 @@ class FakeTransferServer : TransferApi {
         } else {
             null
         }
-        return Session(request, instantOf = original).also { if (original != null) it.completedSha = request.sha256 }
+        return Session(request, linked = original?.let(::assembled)).also { if (original != null) it.completedSha = request.sha256 }
     }
 
     /** A COMPLETED session holds the whole file, so it lists every chunk (instant ones never received any). */
@@ -178,7 +179,7 @@ class FakeTransferServer : TransferApi {
 
     fun assembled(uploadId: String): ByteArray {
         val s = sessions.getValue(uploadId)
-        s.instantOf?.let { return assembled(it) }
+        s.linked?.let { return it.copyOf() }
         return (0 until totalChunks(s.request)).map { s.chunks.getValue(it) }
             .fold(ByteArray(0)) { acc, b -> acc + b }
     }

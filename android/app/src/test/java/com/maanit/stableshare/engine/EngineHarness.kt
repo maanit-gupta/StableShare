@@ -131,10 +131,14 @@ class EngineHarness(
         net.wifiOnly = on
     }
 
-    /** A source file of [size] random bytes, queued for upload through the controller. */
-    suspend fun upload(size: Int, seed: Int = size): Pair<TransferEntity, ByteArray> {
+    /**
+     * A source file of [size] random bytes, queued for upload through the controller. Same seed and
+     * size = same bytes; pass a distinct [fileName] to get an identical copy without touching
+     * (and so changing the mtime of) a file another upload is still reading.
+     */
+    suspend fun upload(size: Int, seed: Int = size, fileName: String = "src-$seed-$size.bin"): Pair<TransferEntity, ByteArray> {
         val bytes = Random(seed).nextBytes(size)
-        val file = File(dir, "src-$seed-$size.bin").apply { writeBytes(bytes) }
+        val file = File(dir, fileName).apply { writeBytes(bytes) }
         return controller.uploadUri(Uri.fromFile(file)) to bytes
     }
 
