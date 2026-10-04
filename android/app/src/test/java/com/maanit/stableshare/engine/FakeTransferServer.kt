@@ -43,9 +43,10 @@ class FakeTransferServer : TransferApi {
         data object Corrupt : Fault
     }
 
-    class Session(val request: CreateSessionRequest) {
+    class Session(val request: CreateSessionRequest, val instantOf: String? = null) {
         val chunks = ConcurrentHashMap<Int, ByteArray>()
         @Volatile var completedSha: String? = null
+        val instant: Boolean get() = instantOf != null
     }
 
     class Blob(val fileId: String, val name: String, @Volatile var bytes: ByteArray) {
@@ -58,6 +59,12 @@ class FakeTransferServer : TransferApi {
 
     /** Runs at the start of every request (after it is recorded); may suspend to hold it. */
     @Volatile var onRequest: suspend (Call) -> Unit = {}
+
+    /** Instant upload (server 6.2a): when false, every create makes a normal session. */
+    @Volatile var instantUploads: Boolean = true
+
+    /** The hash COMPLETED sessions report; tests swap it to simulate a server answering a wrong SHA-256. */
+    @Volatile var reportedSha: (String) -> String = { it }
 
     /** Decides a fault per request; null = behave normally. */
     @Volatile var fault: (Call) -> Fault? = { null }
@@ -85,11 +92,30 @@ class FakeTransferServer : TransferApi {
     override suspend fun createSession(uploadId: String, request: CreateSessionRequest): CreateSessionResponse {
         val call = begin(Op.CREATE, uploadId, null)
         return respond(call) {
-            val session = sessions.getOrPut(uploadId) { Session(request) }
+            val session = sessions.computeIfAbsent(uploadId) { newSession(request) }
             if (session.request != request) throw http(409, "SESSION_CONFLICT")
-            CreateSessionResponse(uploadId, totalChunks(request), request.chunkSize, session.chunks.keys.sorted(), state(session))
+            CreateSessionResponse(
+                uploadId, totalChunks(request), request.chunkSize, received(session), state(session),
+                instant = session.instant, sha256 = session.completedSha?.let(reportedSha),
+            )
         }
     }
+
+    /** Like the server's hash index: an existing COMPLETED session with this sha256 and size makes the new one instant. */
+    private fun newSession(request: CreateSessionRequest): Session {
+        val original = if (instantUploads) {
+            sessions.entries.firstOrNull { (_, s) ->
+                s.completedSha == request.sha256 && s.request.fileSize == request.fileSize
+            }?.key
+        } else {
+            null
+        }
+        return Session(request, instantOf = original).also { if (original != null) it.completedSha = request.sha256 }
+    }
+
+    /** A COMPLETED session holds the whole file, so it lists every chunk (instant ones never received any). */
+    private fun received(s: Session): List<Int> =
+        if (s.completedSha != null) (0 until totalChunks(s.request)).toList() else s.chunks.keys.sorted()
 
     override suspend fun uploadChunk(
         uploadId: String,
@@ -126,7 +152,7 @@ class FakeTransferServer : TransferApi {
             val s = sessions[uploadId] ?: throw http(404, "SESSION_NOT_FOUND")
             UploadStatus(
                 uploadId, s.request.fileName, s.request.fileSize, s.request.chunkSize, totalChunks(s.request),
-                s.chunks.keys.sorted(), state(s), s.completedSha,
+                received(s), state(s), s.completedSha?.let(reportedSha),
             )
         }
     }
@@ -135,13 +161,13 @@ class FakeTransferServer : TransferApi {
         val call = begin(Op.COMPLETE, uploadId, null)
         return respond(call) {
             val s = sessions[uploadId] ?: throw http(404, "SESSION_NOT_FOUND")
-            s.completedSha?.let { return@respond CompleteResponse(uploadId, "COMPLETED", it, s.request.fileSize) }
+            s.completedSha?.let { return@respond CompleteResponse(uploadId, "COMPLETED", reportedSha(it), s.request.fileSize) }
             val missing = (0 until totalChunks(s.request)).filter { !s.chunks.containsKey(it) }
             if (missing.isNotEmpty()) throw http(409, "MISSING_CHUNKS", missing)
             val sha = FileStore.sha256Hex(assembled(uploadId))
             if (sha != s.request.sha256) throw http(422, "FILE_HASH_MISMATCH")
             s.completedSha = sha
-            CompleteResponse(uploadId, "COMPLETED", sha, s.request.fileSize)
+            CompleteResponse(uploadId, "COMPLETED", reportedSha(sha), s.request.fileSize)
         }
     }
 
@@ -152,6 +178,7 @@ class FakeTransferServer : TransferApi {
 
     fun assembled(uploadId: String): ByteArray {
         val s = sessions.getValue(uploadId)
+        s.instantOf?.let { return assembled(it) }
         return (0 until totalChunks(s.request)).map { s.chunks.getValue(it) }
             .fold(ByteArray(0)) { acc, b -> acc + b }
     }

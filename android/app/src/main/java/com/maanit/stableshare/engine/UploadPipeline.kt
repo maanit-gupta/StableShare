@@ -16,6 +16,7 @@ import com.maanit.stableshare.domain.TransferState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 
 /** Runs one claimed (TRANSFERRING) transfer until it completes, fails, waits or is stopped. */
 interface TransferPipeline {
@@ -107,16 +108,23 @@ class UploadPipeline(
         private suspend fun attempt(): Boolean {
             val sha = requireNotNull(t.sha256)
             tracker.setPhase(id, TransferPhase.Transferring)
-            runner.run(Step.Named("create session")) {
+            val created = runner.run(Step.Named("create session")) {
                 session { api.createSession(id, CreateSessionRequest(t.fileName, t.fileSize, t.chunkSize, sha)) }
             }
             repo.setSessionCreated(id)
+            if (created.instant) {
+                // The server already holds this exact file: nothing to send, only verification left.
+                finishCompletedSession(instant = true, serverSha = null)
+                return true
+            }
 
             val status = runner.run(Step.Named("get status")) { session { api.getUploadStatus(id) } }
             if (status.isCompleted) {
                 // complete already succeeded (e.g. its response was lost before a restart).
-                runner.enterVerifying()
-                finish(status.sha256 ?: runner.fail(ErrorCode.UNKNOWN, "Server says COMPLETED without a sha256"))
+                finishCompletedSession(
+                    instant = false,
+                    serverSha = status.sha256 ?: runner.fail(ErrorCode.UNKNOWN, "Server says COMPLETED without a sha256"),
+                )
                 return true
             }
             if (!repo.applyServerReceivedChunks(id, status.receivedChunks)) throw PipelineSignal.Stop("not active")
@@ -128,14 +136,36 @@ class UploadPipeline(
             }
 
             runner.enterVerifying()
-            val serverSha = runner.run(
-                Step.Named("complete"),
-                retryInPlace = false,
-                recover = { outcome -> if (outcome.isAmbiguous) completedViaStatus() else null },
-            ) { session { api.completeUpload(id).sha256 } }
-            finish(serverSha)
+            finish(complete())
             return true
         }
+
+        /**
+         * The server session is already COMPLETED (an instant upload, or a `complete` that succeeded
+         * before a restart): it holds the whole file, so every chunk is DONE (rule 7) and no chunk
+         * is sent. Verification is unchanged: VERIFYING, then the server's hash must equal ours.
+         * [serverSha] null = ask `complete` (idempotent) for it.
+         */
+        private suspend fun finishCompletedSession(instant: Boolean, serverSha: String?) {
+            val all = repo.getChunks(id).map { it.index }
+            if (!repo.applyServerReceivedChunks(id, all)) throw PipelineSignal.Stop("not active")
+            commitProgress()
+            if (instant && !repo.observeHasInstantUpload(id).first()) {
+                repo.logEventWhile(
+                    id, StateMachine.ACTIVE, EventType.INSTANT_UPLOAD,
+                    "Server already has a file with SHA-256 ${t.sha256} and size ${t.fileSize}; no chunks sent",
+                )
+            }
+            runner.enterVerifying()
+            finish(serverSha ?: complete())
+        }
+
+        /** POST complete (VERIFYING): the server assembles and verifies; returns its SHA-256. */
+        private suspend fun complete(): String = runner.run(
+            Step.Named("complete"),
+            retryInPlace = false,
+            recover = { outcome -> if (outcome.isAmbiguous) completedViaStatus() else null },
+        ) { session { api.completeUpload(id).sha256 } }
 
         private suspend fun sendChunk(index: Int, offset: Long, length: Int) {
             var bodySent = false

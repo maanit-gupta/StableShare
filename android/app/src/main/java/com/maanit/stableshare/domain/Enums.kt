@@ -45,6 +45,8 @@ enum class EventType {
     VERIFIED,
     ERROR,
     INFO,
+    /** Upload: the server already held a file with this SHA-256 and size, so no chunks were sent. */
+    INSTANT_UPLOAD,
 }
 
 /** User actions the UI may offer for a given state (see StateMachine.allowedActions). */

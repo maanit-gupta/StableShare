@@ -19,6 +19,10 @@ data class CreateSessionResponse(
     val chunkSize: Int,
     val receivedChunks: List<Int>,
     val state: String,
+    /** True when the server already had this exact file (sha256 + size): the session is COMPLETED. Older servers omit it. */
+    val instant: Boolean = false,
+    /** Present only once COMPLETED: the hash the server verified. */
+    val sha256: String? = null,
 )
 
 @Serializable

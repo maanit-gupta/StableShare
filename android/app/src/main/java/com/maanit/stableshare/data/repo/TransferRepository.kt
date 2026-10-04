@@ -14,6 +14,7 @@ import com.maanit.stableshare.domain.StateMachine
 import com.maanit.stableshare.domain.TransferState
 import com.maanit.stableshare.domain.TransferType
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 /**
@@ -400,6 +401,8 @@ class TransferRepository(
     fun observeChunks(id: String): Flow<List<ChunkEntity>> = chunks.observe(id)
     fun observeEvents(id: String): Flow<List<TransferEventEntity>> = events.observe(id)
     fun observeHistory(): Flow<List<TransferEntity>> = transfers.observeHistory()
+    fun observeHasInstantUpload(id: String): Flow<Boolean> = events.observeHasInstantUpload(id)
+    fun observeInstantUploadIds(): Flow<Set<String>> = events.observeInstantUploadIds().map { it.toSet() }
 
     suspend fun getTransfer(id: String): TransferEntity? = transfers.get(id)
     suspend fun getChunks(id: String): List<ChunkEntity> = chunks.getAll(id)

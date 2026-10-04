@@ -181,6 +181,14 @@ abstract class EventDao {
     @Query("SELECT * FROM transfer_events WHERE transferId = :id ORDER BY id")
     abstract suspend fun getAll(id: String): List<TransferEventEntity>
 
+    /** True once the transfer has an INSTANT_UPLOAD event (EventType is stored by name). */
+    @Query("SELECT EXISTS(SELECT 1 FROM transfer_events WHERE transferId = :id AND type = 'INSTANT_UPLOAD')")
+    abstract fun observeHasInstantUpload(id: String): Flow<Boolean>
+
+    /** Every transfer with an INSTANT_UPLOAD event, for the "Already on server" pill on list rows. */
+    @Query("SELECT DISTINCT transferId FROM transfer_events WHERE type = 'INSTANT_UPLOAD'")
+    abstract fun observeInstantUploadIds(): Flow<List<String>>
+
     @Insert
     internal abstract suspend fun insert(event: TransferEventEntity): Long
 }
