@@ -1,4 +1,4 @@
-NEXT STEP: B
+NEXT STEP: C
 # StableShare — Progress
 
 Updated by Claude Code at the end of every session. Keep this file under 120 lines: when "Gotchas" grows past 15 lines, merge related items.
@@ -39,7 +39,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 
 ### Final phases (`plan/FINAL-PHASES.md`)
 - [x] A Scope reset (2026-10-04: UIDT kept since it is in the code; changed PROGRESS.md, CLAUDE.md Decisions, README.md:373 force-stop now pauses; DESIGN §9 already accurate)
-- [ ] B Release build [ASK]
+- [x] B Release build — 1.1.0 (versionCode 2), release/StableShare-1.1.0.apk, 3 807 237 bytes, v2-signed; 350 unit tests green; sha256 in release/CHECKSUMS.txt
 - [ ] C Real-device test [USER + Claude]
 - [ ] D Screenshots (minimal)
 - [ ] D2 Demo video
@@ -64,7 +64,6 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 
 - 6.4c: Task Manager "Stop" on API 37 = `fully stop … by user request` (ApplicationExitInfo REASON_USER_REQUESTED, subreason 23 STOP APP). Process killed, job dropped ("because of user stop"), no `onStopJob`, package NOT in stopped state. The row stays TRANSFERRING, nothing runs for ≥ 60 s, and the next app open reconciles it → QUEUED → resumes on its own. So the plan's "becomes PAUSED and stays paused" fails. Proposal: at process start read `ActivityManager.getHistoricalProcessExitReasons` (API 30+); if the last exit was REASON_USER_REQUESTED, reconciliation moves TRANSFERRING → PAUSED (legal edge) and VERIFYING → QUEUED (no PAUSED edge, as with a job USER stop), plus an INFO event. That also covers Settings → Force stop. Changes the reconciliation rule (DESIGN §9 + CLAUDE.md). Build it, or accept "resumes on next open" and document it? ANSWER (user, 2026-10-04): build it (REASON_USER_REQUESTED → TRANSFERRING → PAUSED, VERIFYING → QUEUED); update DESIGN §9 + CLAUDE.md.
 - B: Version? ANSWER (user, 2026-10-04): bump to 1.1.0, versionCode 2.
-- B: BLOCKED — `android/keystore.properties` is missing; the signed release build needs it (user creates the keystore + properties file).
 - 6.4c: No API ≤ 33 system image is installed (only android-37.1). Download `system-images;android-33;google_apis;arm64-v8a` (~1.5 GB) via sdkmanager and create an AVD for part 2, or skip part 2? ANSWER (user, 2026-10-04): download it and verify.
 
 ## Gotchas (short, durable facts that save re-discovery)
