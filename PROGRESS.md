@@ -1,4 +1,4 @@
-NEXT STEP: D2
+NEXT STEP: F2
 # StableShare — Progress
 
 Updated by Claude Code at the end of every session. Keep this file under 120 lines: when "Gotchas" grows past 15 lines, merge related items.
@@ -48,10 +48,10 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
   - PASS pause/resume (user-reported only, not observable from the host)
   - PARTIAL download: only sample-0B.bin (0 B) downloaded on the device; the 200 MB download was not run on the phone (verified on the emulator in Phase 3/6.4c). Known limitation for the README.
 - [x] D Screenshots (minimal) (2026-10-04: release 1.1.0 on the OnePlus over LAN, server throttled to 3000 kbps; 05-transfers-active, 07-detail-transferring, 11-history, 12-settings added, 99–154 KB each at 487×1080; older files kept)
-- [ ] D2 Demo video
-- [ ] E1 README sections 1–6
-- [ ] E2 README sections 7–12 + final checks
-- [ ] F1 Push and release, items 1–3
+- [x] D2 Demo video (recorded on emulator-5554 per the user, release 1.1.0: docs/demo/stableshare-demo.mp4 5:39, 2.0 MB; .gif 2:50 at 2×, 5.6 MB; all 9 beats, pause at ~5 % not ~30 %; user marked A–D2 done in the E/F session goal)
+- [x] E1 README sections 1–6 (2026-10-04: README rewritten in one pass, E1+E2 in one session per the user)
+- [x] E2 README sections 7–12 + final checks (334 lines; five headings exact; 86 relative links resolve; 35 Class.method test refs + all server test names grep-verified; endpoints checked against routes; Mermaid by eye; UIDT listed as an extra since step A kept it)
+- [x] F1 Push and release, items 1–3 (secrets check clean: keystore.properties/.jks ignored, never tracked; only >5 MB non-APK file = demo GIF 5.6 MB; CHANGELOG.md 1.1.0; pushed)
 - [ ] F2 Push and release, items 4–5
 
 ## Open questions
@@ -69,6 +69,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - 6.4b: A UIDT host that finds the WorkManager loop holding the lease returns at once, so those transfers keep running under the dataSync FGS. Acceptable, or should the job host wait for the lease? ANSWER (user, 2026-10-04): fine as built.
 
 - 6.4c: Task Manager "Stop" on API 37 = `fully stop … by user request` (ApplicationExitInfo REASON_USER_REQUESTED, subreason 23 STOP APP). Process killed, job dropped ("because of user stop"), no `onStopJob`, package NOT in stopped state. The row stays TRANSFERRING, nothing runs for ≥ 60 s, and the next app open reconciles it → QUEUED → resumes on its own. So the plan's "becomes PAUSED and stays paused" fails. Proposal: at process start read `ActivityManager.getHistoricalProcessExitReasons` (API 30+); if the last exit was REASON_USER_REQUESTED, reconciliation moves TRANSFERRING → PAUSED (legal edge) and VERIFYING → QUEUED (no PAUSED edge, as with a job USER stop), plus an INFO event. That also covers Settings → Force stop. Changes the reconciliation rule (DESIGN §9 + CLAUDE.md). Build it, or accept "resumes on next open" and document it? ANSWER (user, 2026-10-04): build it (REASON_USER_REQUESTED → TRANSFERRING → PAUSED, VERIFYING → QUEUED); update DESIGN §9 + CLAUDE.md.
+- D2: While offline (airplane mode), one rehearsal showed the row as "Waiting, #1 in line" (QUEUED) instead of "Waiting for network" (RETRYING NETWORK_UNAVAILABLE); other takes showed the latter. Likely race: WorkManager stops the worker on its network constraint (→ requeueAfterStop, QUEUED) before NetworkGuard's 1500 ms debounce moves it to RETRYING. It still resumed on its own. Not fixed (no code changes in the final phases). Map that stop to the waiting path, or note it in the README? Noted in README Known limitations (E).
 - B: Version? ANSWER (user, 2026-10-04): bump to 1.1.0, versionCode 2.
 - 6.4c: No API ≤ 33 system image is installed (only android-37.1). Download `system-images;android-33;google_apis;arm64-v8a` (~1.5 GB) via sdkmanager and create an AVD for part 2, or skip part 2? ANSWER (user, 2026-10-04): download it and verify.
 

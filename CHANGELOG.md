@@ -1,0 +1,27 @@
+# Changelog
+
+## 1.1.0 (versionCode 2), 2026-10-04
+
+APK: `release/StableShare-1.1.0.apk`, 3 807 237 bytes, v2-signed, SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0`.
+
+### Added
+- **Wi-Fi only** setting. No engine traffic goes over metered networks. Running transfers stop within 1.5 s of losing Wi-Fi, wait as "Waiting for Wi-Fi" without using retry attempts, and resume on Wi-Fi (d7f485c, 90dd329).
+- **Instant upload.** The server keeps a hash index of completed files, so a file it already has (same SHA-256 and size) completes without sending any pieces and is still verified. The app shows an "Already on server" pill and a "Data sent" row (1172a70, 9d74c4a, 2084ce8).
+- **Pieces at once per transfer** setting (1, 2 or 4; default 1). It caps the number of piece requests and buffers in flight. Benchmarks are in `docs/benchmarks.md` (4bfe6ff, c5b6918).
+- **User-initiated data transfer job** on Android 14+ for transfers the user starts, with WorkManager as the other host. A process-wide `RunLease` keeps a single coordinator loop. The ongoing notification gains a "Pause transfers" action (93c2c77, ea099a0).
+- **Model-based and fuzz tests** for the repository and the engine, and GitHub Actions CI (server tests, Android unit tests, debug APK), plus a manual chaos workflow (1ef0a52, d97cebf).
+
+### Changed
+- Stopping the app from Task Manager, or with Force stop, now pauses its interrupted transfers on the next launch instead of resuming them (read from `ApplicationExitInfo`, API 30+) (b2aa451).
+
+### Fixed
+- A retry event could be logged after a concurrent cancel. Found by the engine fuzzer (seed 1346) (564085d).
+- A latent race when claiming queued transfers while a job finished (242f74e).
+
+### Verified
+- 47 server tests and 350 Android JVM tests green. Fuzz suites green at 2000 seeds.
+- Real device (OnePlus CPH2717, Android 16, release build over LAN): uploads of 112 MB and 155 MB, resume after a process kill, instant re-upload, pause and resume. Only a 0-byte download was run on the phone. The 200 MB download was verified on emulators.
+
+## 1.0.0 (versionCode 1)
+
+The first complete build: mock server and CLI client, Android data layer, transfer engine, full UI and the README (Phases 1–4). Not published as a GitHub release.
