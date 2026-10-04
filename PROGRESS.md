@@ -1,4 +1,4 @@
-NEXT STEP: D
+NEXT STEP: D2
 # StableShare — Progress
 
 Updated by Claude Code at the end of every session. Keep this file under 120 lines: when "Gotchas" grows past 15 lines, merge related items.
@@ -47,7 +47,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
   - PASS instant re-upload: server `instantUploads: 2` (presentation.mov, Backgroud_1.mp4), "Already on server" shown
   - PASS pause/resume (user-reported only, not observable from the host)
   - PARTIAL download: only sample-0B.bin (0 B) downloaded on the device; the 200 MB download was not run on the phone (verified on the emulator in Phase 3/6.4c). Known limitation for the README.
-- [ ] D Screenshots (minimal)
+- [x] D Screenshots (minimal) (2026-10-04: release 1.1.0 on the OnePlus over LAN, server throttled to 3000 kbps; 05-transfers-active, 07-detail-transferring, 11-history, 12-settings added, 99–154 KB each at 487×1080; older files kept)
 - [ ] D2 Demo video
 - [ ] E1 README sections 1–6
 - [ ] E2 README sections 7–12 + final checks
