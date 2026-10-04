@@ -1,6 +1,20 @@
-# StableShare
+<p align="center">
+  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk">
+    <img src="docs/design/mascot/previews/launcher_icon.png" width="128" alt="StableShare app icon. Tap to download the APK">
+  </a>
+</p>
 
-[![CI](https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml/badge.svg)](https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml)
+<h1 align="center">StableShare</h1>
+
+<p align="center">
+  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk">
+    <img src="https://img.shields.io/badge/Download_APK-v1.1.0-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Download StableShare APK v1.1.0">
+  </a>
+  <br>
+  <sub>Android 8.0+ · 3.8 MB · signed release · <a href="https://github.com/maanit-gupta/StableShare/releases/tag/v1.1.0">release notes</a></sub>
+  <br><br>
+  <a href="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml"><img src="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
 StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads and downloads files of up to 1 GB to a local Node.js mock server and survives pause and resume, lost or flapping networks, timeouts, lost responses, server errors, app kills and restarts. Files move in SHA-256-checked pieces. Every state change is a validated compare-and-set in Room, and every retry is bounded. A transfer shows **Completed** only after the whole file has been verified end to end. The server injects faults on demand from the app's own network simulator, so you can watch all of this happen.
 
@@ -8,7 +22,9 @@ StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads 
 |---|---|---|---|
 | ![Transfers](docs/screenshots/05-transfers-active.png) | ![Detail](docs/screenshots/07-detail-transferring.png) | ![History](docs/screenshots/11-history.png) | ![Settings](docs/screenshots/12-settings.png) |
 
-**Download:** [StableShare-1.1.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk) from the [v1.1.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.1.0) (3 807 237 bytes, v2-signed; also in [release/](release/StableShare-1.1.0.apk)), SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0` ([CHECKSUMS.txt](release/CHECKSUMS.txt)).
+**Download:** tap the icon or the button above, or this link: [StableShare-1.1.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk) from the [v1.1.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.1.0) (3 807 237 bytes, v2-signed; also in [release/](release/StableShare-1.1.0.apk)), SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0` ([CHECKSUMS.txt](release/CHECKSUMS.txt)).
+
+**Install on a phone:** open the link on the Android device, then open the downloaded file. Android asks you to allow installs from your browser or file manager the first time. Then set the server address in Settings (see [Quick start](#quick-start)).
 
 The full design is in [docs/DESIGN.md](docs/DESIGN.md) and the UI spec is in [docs/UI-SPEC.md](docs/UI-SPEC.md).
 
