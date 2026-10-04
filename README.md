@@ -18,17 +18,27 @@ The full design is in [docs/DESIGN.md](docs/DESIGN.md) and the UI spec is in [do
 
 The GIF plays at 2× speed. The full 5:39 recording at normal speed is [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4). It was recorded on an API 37 emulator with the release build and driven by adb ([docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) lists the beats).
 
+## Features
+
+- **Resumable uploads and downloads** of files up to 1 GB, in SHA-256-checked pieces (1, 2 or 5 MB).
+- **Pause and resume** from any row or the detail screen. Finished pieces are never sent again.
+- **Automatic retry** with bounded, jittered backoff for timeouts, dropped connections, 5xx and 429. Lost responses are confirmed with the server instead of resent.
+- **Network awareness:** transfers wait without using retry attempts while offline (or on mobile data with Wi-Fi only on) and resume by themselves.
+- **Persistence across app kills, crashes and reboots:** every state change is in Room, and resumed transfers show "Restored after restart".
+- **Verified completion:** a transfer is Completed only after the whole file's SHA-256 matches (checked by the server for uploads, re-hashed locally for downloads).
+- **Several transfers at once** (1–4), cancel with cleanup, History, notifications, and a built-in network simulator that drives the server's fault injection.
+
 ## Requirements covered
 
 | # | Requirement | Where implemented | How tested |
 |---|---|---|---|
-| 1 | Chunked upload of large files (≤ 1 GB) | [UploadPipeline], [FileStore], [server uploads] | `UploadPipelineTest.happyPathCompletesWithServerVerifiedHash`, server `happy path: chunks stored…`, instrumented [PickedFileUploadTest] (real system picker), 112 MB and 155 MB on a phone (step C) |
+| 1 | Chunked upload of large files (≤ 1 GB) | [UploadPipeline], [FileStore], [server uploads] | `UploadPipelineTest.happyPathCompletesWithServerVerifiedHash`, server `happy path: chunks stored…`, instrumented [PickedFileUploadTest] (real system picker), 112 MB and 155 MB on a phone |
 | 2 | Ranged, resumable download | [DownloadPipeline], [server files] | `DownloadPipelineTest.happyPathVerifiesAndRenamesAtomically`, `ProtocolClientTest.downloadRangeSendsRangeAndIfRangeAndHashesBody`, server `Range → 206…` |
 | 3 | Pause and resume | [TransferController], [TransferEngine] | `TransferEngineTest.pauseAndResumeUploadNeverResendsEarlierChunks` / `…DownloadNeverRefetchesEarlierChunks` |
 | 4 | Survive network loss, resume automatically | [ConnectivityMonitor], [NetworkGuard], [ErrorClassifier] | `UploadPipelineTest.networkLossWaitsWithoutConsumingAttemptsAndResumesWhenOnline`, [WifiOnlyTest], [NetworkGuardTest] |
 | 5 | Timeouts and server errors, bounded retries | [RetryRunner], [RetryPolicy] | `UploadPipelineTest.twoServerErrorsThenSuccess`, `…serverErrorsForeverExhaustRetriesKeepingProgressAndManualRetrySendsOnlyTheRest`, [RetryPolicyTest] |
 | 6 | Lost responses | [UploadPipeline] (status check before any resend) | `UploadPipelineTest.lostChunkResponseIsConfirmedByStatusWithoutResending`, `…lostCompleteResponseIsConfirmedByStatus`, server `dropAfterProcess: …` |
-| 7 | App kill, process death, restart | [TransferRepository] `reconcileAfterProcessStart`, [RestoredTransfers], [PreviousProcessExit] | `TransferEngineTest.processDeathMidChunkUploadResumesFromLastDoneChunk` (and Download), `TransferRepositoryTest.reconciliationRequeuesOnlyInFlightRows`, [chaos-test.sh] (`kill -9`), phone `am crash` (step C) |
+| 7 | App kill, process death, restart | [TransferRepository] `reconcileAfterProcessStart`, [RestoredTransfers], [PreviousProcessExit] | `TransferEngineTest.processDeathMidChunkUploadResumesFromLastDoneChunk` (and Download), `TransferRepositoryTest.reconciliationRequeuesOnlyInFlightRows`, [chaos-test.sh] (`kill -9`), phone `am crash` |
 | 8 | COMPLETED only after whole-file verification | [StateMachine], both pipelines, server `complete` | `StateMachineTest.completedOnlyFromVerifying`, `DownloadPipelineTest.fullFileMismatchRefetchesOnlyTheBadChunks`, server `hash mismatch → 422…` |
 | 9 | Cancel with cleanup | [TransferController] | `TransferEngineTest.cancelWhileTransferringUploadDeletesSessionAndIsNeverRevived`, `…DownloadDeletesThePartFile`, `…cancelWhilePausedCleansUpWithoutACoordinator` |
 | 10 | Several transfers with a limit (1–4) | [TransferEngine], [RunLease] | `TransferEngineTest.neverMoreThanMaxConcurrentAndRaisingTheLimitApplies`, `…loweringTheLimitLetsRunningTransfersFinish`, [RunLeaseTest] |
@@ -51,10 +61,10 @@ The GIF plays at 2× speed. The full 5:39 recording at normal speed is [docs/dem
 cd server
 npm install
 npm run seed   # sample-0B, sample-odd (3 MiB + 123 B), sample-50MB, sample-200MB, sample-500MB, sample-1GB
-npm run dev    # http://0.0.0.0:8080 (PORT and HOST env vars override)
+npm run dev    # http://0.0.0.0:8080; settings are env vars, see server/.env.example
 ```
 
-**App:** `adb install -r release/StableShare-1.1.0.apk`, or build it from `android/` with `./gradlew assembleDebug`.
+**App:** the signed APK is [release/StableShare-1.1.0.apk](release/StableShare-1.1.0.apk); install it with `adb install -r release/StableShare-1.1.0.apk`. To build from source (JDK 25 toolchain, Android SDK), run `./gradlew assembleDebug` in `android/`. `./gradlew assembleRelease` signs only when `android/keystore.properties` exists; that file and the keystore are not in the repository.
 
 **Server address** (Settings → Server address, then **Test connection**):
 - **Emulator:** the default `http://10.0.2.2:8080` reaches the host machine.
@@ -252,7 +262,7 @@ cd android && ./gradlew connectedDebugAndroidTest   # instrumented: launch + rea
 - **Single-process mock server.** Per-session locks ([locks.js](server/src/locks.js)) are in memory, so it can't be scaled out as is.
 - **Force stop** can't be survived (see above). Transfers pause and wait for the user.
 - **The UIDT job needs a validated network.** JobScheduler turns `NETWORK_TYPE_ANY` into INTERNET + VALIDATED (seen in `dumpsys` on API 37). On older Android versions, and for background starts, WorkManager is the host.
-- **Real-device test (step C, OnePlus, Android 16):** uploads, kill and resume, instant upload and pause/resume passed. Only a 0-byte download was run on the phone. The 200 MB download was verified on emulators only.
+- **Real-device test (OnePlus CPH2717, Android 16):** uploads, kill and resume, instant upload and pause/resume passed. Only a 0-byte download was run on the phone. The 200 MB download was verified on emulators only.
 - **Offline race:** in one demo rehearsal, a row showed "Waiting, #1 in line" instead of "Waiting for network", probably because WorkManager stopped on its network constraint before the 1.5 s guard fired. It still resumed on its own.
 - **Slow uploads hit the read timeout:** at 512 kbps, a 2 MiB piece needs about 33 s, more than OkHttp's 30 s read timeout ([ProtocolClient]), so pieces retry. They still verify.
 - **Retrying `REMOTE_FILE_CHANGED`** reuses the old ETag and fails again, so the user must cancel and download again.
@@ -263,7 +273,7 @@ cd android && ./gradlew connectedDebugAndroidTest   # instrumented: launch + rea
 
 ```
 StableShare/
-├── README.md, CHANGELOG.md, CLAUDE.md
+├── README.md, CHANGELOG.md, .gitignore
 ├── .github/workflows/      ci.yml (tests on push/PR), chaos.yml (manual)
 ├── docs/                   DESIGN.md, UI-SPEC.md, benchmarks.md, DEMO-SCRIPT.md, demo/, screenshots/, design/mascot/
 ├── release/                StableShare-1.1.0.apk, CHECKSUMS.txt
@@ -271,17 +281,20 @@ StableShare/
 ├── server/
 │   ├── src/                app.js, server.js, routes/ (uploads, files, admin), faults.js, storage.js, locks.js
 │   ├── scripts/            seed.js, cli-client.js, chaos-test.sh
+│   ├── .env.example        optional settings (port, storage dir, chunk size, session TTL)
 │   └── test/               uploads, files, faults, instant, concurrency
-└── android/app/src/
-    ├── main/java/com/maanit/stableshare/
-    │   ├── domain/         StateMachine, RetryPolicy, ChunkPlanner
-    │   ├── data/           db/ (Room), repo/, net/, files/, settings/
-    │   ├── engine/         TransferEngine, pipelines, RetryRunner, NetworkGuard, RunLease, TransferController
-    │   ├── worker/         WorkManager coordinator, UIDT job service, notifications
-    │   ├── di/             AppContainer
-    │   └── ui/             Compose screens, theme, mascot, presentation model
-    ├── test/               JVM + Robolectric tests, fuzz/
-    └── androidTest/        instrumented tests
+└── android/
+    ├── scripts/            benchmark-parallel.sh (docs/benchmarks.md)
+    └── app/src/
+        ├── main/java/com/maanit/stableshare/
+        │   ├── domain/     StateMachine, RetryPolicy, ChunkPlanner
+        │   ├── data/       db/ (Room), repo/, net/, files/, settings/
+        │   ├── engine/     TransferEngine, pipelines, RetryRunner, NetworkGuard, RunLease, TransferController
+        │   ├── worker/     WorkManager coordinator, UIDT job service, notifications
+        │   ├── di/         AppContainer
+        │   └── ui/         Compose screens, theme, mascot, presentation model
+        ├── test/           JVM + Robolectric tests, fuzz/
+        └── androidTest/    instrumented tests
 ```
 
 [StateMachine]: android/app/src/main/java/com/maanit/stableshare/domain/StateMachine.kt

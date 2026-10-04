@@ -24,4 +24,4 @@ APK: `release/StableShare-1.1.0.apk`, 3 807 237 bytes, v2-signed, SHA-256 `b8e41
 
 ## 1.0.0 (versionCode 1)
 
-The first complete build: mock server and CLI client, Android data layer, transfer engine, full UI and the README (Phases 1–4). Not published as a GitHub release.
+The first complete build: mock server and CLI client, Android data layer, transfer engine, full UI and the README. Not published as a GitHub release.
