@@ -6,8 +6,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE]** (`plan/6d-uidt.md`).
-Before it (user): decide the parallel-chunks default (docs/benchmarks.md; recommendation: keep 1) and answer the 6.3c questions below. Optional: push `phase-5-safety-net` and confirm CI is green.
+Next step: **6.4b UIDT: TransferJobService, scheduling, stop mapping** (`plan/6d-uidt.md`). Answer the 6.4b questions below first.
+Still open for the user: parallel-chunks default and the other 6.3c questions. Optional: push `phase-5-safety-net` and confirm CI is green.
 
 ## Checklist
 
@@ -26,7 +26,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 6.3a Parallel chunks: server safety (`plan/6c-parallel-chunks.md`) (2026-10-04: 6436163; server already serialised meta.json per uploadId with KeyedLock, so no code change; 4 tests in `test/concurrency.test.js`, all 4 fail with the lock bypassed; 47 server tests green; DESIGN §6.4 + fault table updated)
 - [x] 6.3b Parallel chunks: engine [APPROVE] (2026-10-04: 4bfe6ff, 2587b46 + docs; 319 JVM tests green incl. 16 in `engine/ParallelChunksTest`; fuzz 2000 seeds green with N ∈ {1,2,4}; seed 1346 re-checked)
 - [x] 6.3c Parallel chunks: UI and benchmark (2026-10-04: c5b6918 UI, 90be639 test de-flake, c258804/0b68c71/0e57920 benchmark harness, cd598d7 docs; 325 JVM tests green ×2; benchmark on Pixel_9_root API 37, table in docs/benchmarks.md)
-- [ ] 6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE] (`plan/6d-uidt.md`)
+- [x] 6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE] (`plan/6d-uidt.md`) (2026-10-04: approved variant = no new class, `TransferEngine.run` already is the loop; `RunLease` single-flight with rerun flag, 93c2c77; latent claim race fixed, 242f74e; 329 JVM tests green, fuzz 2000 green; DESIGN §9 "Hosts and the run lease")
 - [ ] 6.4b UIDT: TransferJobService, scheduling, stop mapping
 - [ ] 6.4c UIDT: emulator verification and docs
 
@@ -60,7 +60,11 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - 6.3c: Placement guessed (plan silent): the control sits directly below "Transfers at the same time" (UI-SPEC §5.10). OK?
 - 6.3c: Slow-network uploads time out: at 512 kbps a 2 MiB piece needs ~33 s, but OkHttp's 30 s read timeout (`ProtocolClient.kt:265`) starts once the body is in socket buffers. Pieces retry and still verify, but N = 1 upload takes 498 s vs 337 s download. Raise the read timeout for chunk PUTs, or scale it with piece size? Not changed (engine change outside 6.3c).
 - 6.3c: Server bug? `faults.js` throttles whenever `bandwidthKbps > 0`, even with `enabled: false` (latency and the rates do respect `enabled`). The UI's Off preset zeroes everything, so only API users hit it. Fix the server to gate on `enabled`?
-- 6.3c: `ParallelChunksTest.networkLossWithSeveralWorkersMakesExactlyOneRetryingTransition` failed once in an isolated class run (9 passes after, message not captured). Pre-existing 6.3b test, not touched by this step; worth a look if it shows up in CI.
+- 6.3c: `ParallelChunksTest.networkLossWithSeveralWorkersMakesExactlyOneRetryingTransition` failed once in an isolated class run (9 passes after, message not captured). Pre-existing 6.3b test, not touched by this step; worth a look if it shows up in CI. Likely cause found in 6.4a: `claimNextQueued(exclude = jobs.keys)` read a live key view that a finishing job could empty mid-copy (NoSuchElementException, seen once in UploadPipelineTest); fixed in 242f74e.
+
+- 6.4b: UIDT jobs must have a network constraint (JobInfo docs, API 34). When it is lost the system stops the job (`onStopJob`, reschedules), which today hits `requeueAfterStop` (QUEUED, "Interrupted by a system stop") instead of RETRYING NETWORK_UNAVAILABLE. Plan: constraint `NETWORK_TYPE_ANY` even with Wi-Fi only (NetworkGuard keeps deciding metered), and map STOP_REASON_CONSTRAINT_CONNECTIVITY to the waiting path. OK?
+- 6.4b: Task Manager "Stop" kills the process with no `onStopJob` and the app cannot reschedule that job; the docs recommend a stop/pause action in the job notification. UI-SPEC has none. Add a "Pause all" notification action (copy?), or leave it and rely on the WorkManager backstop + reconciliation?
+- 6.4b: A UIDT host that finds the WorkManager loop holding the lease returns at once, so those transfers keep running under the dataSync FGS. Acceptable, or should the job host wait for the lease?
 
 ## Gotchas (short, durable facts that save re-discovery)
 
@@ -80,3 +84,4 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - Parallel chunks (UI, 6.3c): Settings tag `parallelChunks`; tracker `backoffChunks` (index → failed attempts, set by `chunkBackingOff` from `runChunkInPlace`'s onBackoff, cleared when the piece moves/commits or the phase leaves Transferring); `TransferItem.inFlightChunks`/`chunkBackoff`. Robolectric `captureToImage` times out; PiecesCardTest draws the decor view into a software bitmap under `@GraphicsMode(NATIVE)`. Robolectric tests that change maxConcurrent/wifiOnly need `WorkManagerTestInitHelper` (else a background exception fails a later test). Baseline: 325 Android JVM tests.
 - Benchmark (6.3c) headline: fast link, warm: upload N=1 40.7 s, N=2 41.0 s, N=4 34.6 s; download 26.4 / 23.8 / 21.0 s (200 MiB). Slow network (20 MiB): upload 498 / 236 / 136 s, download 337 / 170 / 102 s. The first case of a session runs cold (103 → 35 s), so warm up first. Run: `android/scripts/benchmark-parallel.sh` (~1.5 h); `bench-20MB` is seeded into server storage by the script.
 - Server parallel chunks: `KeyedLock` (per uploadId) already guarded meta.json; `bandwidthKbps` is per request (each body throttled from its own start), so N parallel chunks get N × the limit; the 6.3c benchmark notes must say so. Baseline: 47 server tests.
+- Coordinator lease (6.4a): `RunLease` in `engine/`, owned by `AppContainer.runLease`; `TransferEngine.run()` now returns Boolean (false = handed off). `EngineHarness.lease` / `onWakeup` (fires in the loop's exit window) are the test seams. UIDT facts verified 2026-10-04: network constraint mandatory, allowed constraints have no delay (wake-ups stay WorkManager), background schedule → RESULT_FAILURE (fall back to WorkManager), `setEstimatedNetworkBytes` recommended. Baseline: 329 Android JVM tests.
