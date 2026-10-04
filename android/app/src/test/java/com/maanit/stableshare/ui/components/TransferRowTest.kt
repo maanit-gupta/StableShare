@@ -166,4 +166,16 @@ class TransferRowTest {
         show(item(row(TransferState.QUEUED), position = 1, restored = true))
         compose.onNodeWithText("Restored after restart").assertExists()
     }
+
+    @Test
+    fun instantPill() {
+        show(TransferItem.build(row(TransferState.COMPLETED, bytes = 200 * mb), null, null, restored = false, now = 0, instant = true))
+        compose.onNodeWithText("Already on server").assertExists()
+    }
+
+    @Test
+    fun noInstantPillForOrdinaryTransfers() {
+        show(item(row(TransferState.COMPLETED, bytes = 200 * mb)))
+        compose.onNodeWithText("Already on server").assertDoesNotExist()
+    }
 }

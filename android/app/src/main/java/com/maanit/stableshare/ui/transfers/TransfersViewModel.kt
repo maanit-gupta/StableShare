@@ -77,14 +77,14 @@ class TransfersViewModel(
     }
 
     val ui: StateFlow<TransfersUi> = combine(
-        repo.observeTransfers(),
+        combine(repo.observeTransfers(), repo.observeInstantUploadIds(), ::Pair),
         tracker.progress,
         restored,
         combine(settings, networkState, ::Pair),
         ticker,
-    ) { rows, live, restoredIds, (s, network), now ->
+    ) { (rows, instantIds), live, restoredIds, (s, network), now ->
         val wifiGated = TransferItem.wifiGated(s.wifiOnly, network)
-        val items = TransferItem.buildAll(rows, live, restoredIds, now, wifiGated).associateBy { it.id }
+        val items = TransferItem.buildAll(rows, live, restoredIds, now, wifiGated, instantIds).associateBy { it.id }
         val visible = rows.filter { visible(it, now) }
         fun sorted(list: List<TransferEntity>) = list.sortedWith(compareBy({ it.createdAt }, { it.id })).map { items.getValue(it.id) }
         val active = sorted(visible.filter { it.state in ACTIVE || it.state == TransferState.COMPLETED })

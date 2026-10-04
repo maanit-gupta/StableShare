@@ -43,6 +43,31 @@ class ActivityMapperTest {
         ActivityMapper.map(events, maxTries = 5).map { it.message.resolve(context.resources) }
 
     @Test
+    fun instantUploadShowsTheAlreadyHadItLine() = runTest {
+        val h = EngineHarness(context, tmp.newFolder(), clock = { testScheduler.currentTime })
+        closers += h::close
+        h.upload(3 * EngineHarness.CHUNK)
+        h.engine.run()
+        val (t, _) = h.upload(3 * EngineHarness.CHUNK)
+        h.engine.run()
+        assertEquals(TransferState.COMPLETED, h.state(t.id))
+
+        val shown = texts(h.events(t.id)).asReversed()
+        val expected = listOf(
+            "Added to the queue",
+            "Started moving",
+            "The server already had this exact file, so nothing needed sending",
+            "Checking the finished file",
+            "Checksum verified",
+            "Completed",
+        )
+        var at = 0
+        for (line in shown) if (at < expected.size && line == expected[at]) at++
+        assertEquals("all expected entries in order; got $shown", expected.size, at)
+        assertTrue(shown.none { it.startsWith("Piece") })
+    }
+
+    @Test
     fun engineRunWithARetryCollapsesPiecesAndShowsTheRetry() = runTest {
         val h = EngineHarness(context, tmp.newFolder(), clock = { testScheduler.currentTime })
         closers += h::close

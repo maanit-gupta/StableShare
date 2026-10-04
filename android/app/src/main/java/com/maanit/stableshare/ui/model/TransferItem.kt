@@ -64,6 +64,8 @@ data class TransferItem(
     val queuePosition: Int?,
     val restored: Boolean,
     val inFlightChunk: Int?,
+    /** The server already had this file (an INSTANT_UPLOAD event): "Already on server" pill. */
+    val instant: Boolean = false,
 ) {
     val id: String get() = row.id
     val name: String get() = row.fileName
@@ -95,6 +97,7 @@ data class TransferItem(
             restored: Boolean,
             now: Long,
             wifiGated: Boolean = false,
+            instant: Boolean = false,
         ): TransferItem {
             val phase = live?.phase
             val condition = conditionOf(row.state, row.errorCode, phase, wifiGated)
@@ -114,6 +117,7 @@ data class TransferItem(
                 queuePosition = queuePosition,
                 restored = restored,
                 inFlightChunk = live?.inFlightChunk,
+                instant = instant,
             )
         }
 
@@ -130,9 +134,10 @@ data class TransferItem(
             restored: Set<String>,
             now: Long,
             wifiGated: Boolean = false,
+            instant: Set<String> = emptySet(),
         ): List<TransferItem> {
             val positions = queuePositions(rows)
-            return rows.map { build(it, live[it.id], positions[it.id], it.id in restored, now, wifiGated) }
+            return rows.map { build(it, live[it.id], positions[it.id], it.id in restored, now, wifiGated, it.id in instant) }
         }
     }
 }

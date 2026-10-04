@@ -56,6 +56,7 @@ object ActivityMapper {
                 maxTries,
             )
             EventType.VERIFIED -> UiText.res(R.string.act_verified)
+            EventType.INSTANT_UPLOAD -> UiText.res(R.string.act_instant_upload)
             EventType.ERROR -> ErrorCopy.long(bracketCode(e.message), maxTries)
             EventType.INFO ->
                 if (e.message.startsWith(RESTORED_PREFIX)) UiText.res(R.string.act_restored) else UiText.Raw(e.message)

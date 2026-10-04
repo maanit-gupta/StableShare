@@ -8,6 +8,7 @@ import com.maanit.stableshare.data.db.TransferEntity
 import com.maanit.stableshare.data.repo.TransferRepository
 import com.maanit.stableshare.data.settings.Settings
 import com.maanit.stableshare.domain.ChunkStatus
+import com.maanit.stableshare.domain.EventType
 import com.maanit.stableshare.domain.TransferAction
 import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferProgressTracker
@@ -89,7 +90,8 @@ class DetailViewModel(
     val state: StateFlow<DetailState> = combine(stored, live) { (rows, chunks, events), l ->
         val row = rows.firstOrNull { it.id == id } ?: return@combine DetailState.Gone
         val position = TransferItem.queuePositions(rows)[id]
-        val item = TransferItem.build(row, l.progress, position, l.restored, l.now, l.wifiGated)
+        val instant = events.any { it.type == EventType.INSTANT_UPLOAD }
+        val item = TransferItem.build(row, l.progress, position, l.restored, l.now, l.wifiGated, instant)
         DetailState.Ready(
             DetailUi(
                 item = item,

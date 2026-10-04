@@ -58,6 +58,7 @@ import com.maanit.stableshare.domain.TransferState
 import com.maanit.stableshare.domain.TransferType
 import com.maanit.stableshare.ui.FileIntents
 import com.maanit.stableshare.ui.components.CancelTransferDialog
+import com.maanit.stableshare.ui.components.InstantPill
 import com.maanit.stableshare.ui.components.MAX_TRIES
 import com.maanit.stableshare.ui.components.MintButton
 import com.maanit.stableshare.ui.components.MintButtonKind
@@ -86,7 +87,7 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Detail(ui: DetailUi, onBack: () -> Unit, perform: (TransferAction) -> Unit) {
+internal fun Detail(ui: DetailUi, onBack: () -> Unit, perform: (TransferAction) -> Unit) {
     val item = ui.item
     var confirmCancel by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Mint.colors.bg)) {
@@ -110,6 +111,10 @@ private fun Detail(ui: DetailUi, onBack: () -> Unit, perform: (TransferAction) -
                     overflow = TextOverflow.MiddleEllipsis,
                     modifier = Modifier.padding(horizontal = 24.dp),
                 )
+                if (item.instant) {
+                    Spacer(Modifier.height(4.dp))
+                    InstantPill()
+                }
                 Spacer(Modifier.height(20.dp))
                 val label = StatePresentation.listLabel(item, MAX_TRIES).text()
                 val progressText = progressStateDescription(label, item.percent)

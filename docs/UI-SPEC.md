@@ -305,6 +305,7 @@ Top section (horizontal):
   - Size line, `neutral.meta`: "{done} of {total}" while incomplete (for example "84 of 200 MB"), or "{total}" when complete.
   - Live line, `neutral.meta`, only while TRANSFERRING with speed above 0: "{speed}, {eta} left" (for example "4.1 MB/s, 28 s left").
   - "Restored" pill, only when the transfer is in the in-memory restored set (5.4.2): height 20 dp, `neutral.pill`, 8 dp horizontal padding, text "Restored after restart" in 11 sp Medium `neutral.inkSecondary`, 4 dp below the previous line.
+  - "Already on server" pill, only when the transfer has an INSTANT_UPLOAD event (the server already held a file with the same SHA-256 and size, so no pieces were sent): same style as the Restored pill, text "Already on server", 4 dp below the previous line (below the Restored pill when both show). The same pill appears on History rows (5.9) and on the detail screen 4 dp below the file line (5.8).
 - **Action buttons** on the right: up to two icon buttons, 24 dp icons in `neutral.inkSecondary`, 48 dp touch targets, 4 dp apart, top-aligned. Order: primary action, then Cancel. Icons: Pause `pause`, Resume `play_arrow`, Retry `refresh`, Cancel `close`. Content descriptions: "Pause {name}", "Resume {name}", "Retry {name}", "Cancel {name}".
 
 Bottom section, 12 dp below:
@@ -513,6 +514,7 @@ Below the hero, in a column with 16 dp gaps and 20 dp side margins. Each card: `
 - "Direction": "Upload to server" / "Download from server"
 - "Size": exact bytes with grouping (for example "209,715,200 bytes")
 - "Pieces": "{count} × {chunk size}"
+- "Data sent": "None, the server already had this file" — instant uploads only (the transfer has an INSTANT_UPLOAD event); for every other transfer the row is not shown
 - "Transfer ID": the id in monospace 12 sp, with a copy icon button (`content_copy`) that copies it and shows a toast "Copied"
 - "Server ID": upload session id or remote file id (monospace, copy button)
 - "Saved to": local path (downloads), or "Picked file" / "Generated test file" (uploads)
@@ -525,7 +527,7 @@ Below the hero, in a column with 16 dp gaps and 20 dp side margins. Each card: `
 
 - Title "History" (`neutral.title`). Top-right text button "Clear all" (`neutral.danger`), shown when the list is not empty; it opens the dialog "Clear history?" / "This removes finished and cancelled transfers from the list. Downloaded files stay on your phone." with buttons "Keep" and "Clear".
 - Filter chips 16 dp below the title: "All", "Completed", "Cancelled" (32 dp tall; selected chip filled `neutral.inkPrimary` with white label; unselected `neutral.pill` with `neutral.inkPrimary` label).
-- Rows: the shared row layout without action buttons or progress bar. Lines: name; "{size}, took {duration}, averaged {speed}" (`neutral.meta`); finish time (`neutral.meta`, "MMM d, HH:mm"). Status line: "Verified" in `neutral.success` with the 24 dp check badge, plus the first 8 and last 4 hex characters of the SHA-256 in `neutral.hash` ("a3f9c2b1…c21e"); or "Cancelled" in `neutral.inkTertiary` with a 24 dp `neutral.pill` circle containing `close` in `neutral.inkSecondary`.
+- Rows: the shared row layout without action buttons or progress bar. Lines: name; "{size}, took {duration}, averaged {speed}" (`neutral.meta`); finish time (`neutral.meta`, "MMM d, HH:mm"); the "Already on server" pill (5.4.1) for instant uploads, 4 dp below. Status line: "Verified" in `neutral.success` with the 24 dp check badge, plus the first 8 and last 4 hex characters of the SHA-256 in `neutral.hash` ("a3f9c2b1…c21e"); or "Cancelled" in `neutral.inkTertiary` with a 24 dp `neutral.pill` circle containing `close` in `neutral.inkSecondary`.
 - An overflow icon button (`more_vert`) per row with "Open file" and "Share file" (completed downloads only, through a configured `FileProvider`) and "Remove from history".
 - Newest first; tapping a row opens Detail.
 - Empty state: mascot (calm face, no plane) at 120 dp, decorative; "No finished transfers yet" (`neutral.heading`); "Completed and cancelled transfers will show up here." (`neutral.body`).
@@ -648,6 +650,7 @@ The two Wi-Fi rows keep the mascot, ring and plane of their state: QUEUED's for 
 | CHUNK_CONFIRMED_AFTER_LOST_RESPONSE | "Piece {n} confirmed by the server after a lost reply" |
 | RETRY_SCHEDULED | "Trying again in {s} s (attempt {a} of {max})" |
 | VERIFIED | "Checksum verified" |
+| INSTANT_UPLOAD | "The server already had this exact file, so nothing needed sending" |
 | ERROR | "{long reason}" |
 | INFO "recovered after process restart" | "Restored after the app restarted" |
 | INFO (other) | The event message as stored (for example "Still waiting: now offline" when a row waiting for Wi-Fi loses the network altogether) |

@@ -51,6 +51,7 @@ import com.maanit.stableshare.domain.TransferType
 import com.maanit.stableshare.ui.FileIntents
 import com.maanit.stableshare.ui.components.CheckBadge
 import com.maanit.stableshare.ui.components.FileIcon
+import com.maanit.stableshare.ui.components.InstantPill
 import com.maanit.stableshare.ui.components.NeutralDialog
 import com.maanit.stableshare.ui.components.NeutralTextButton
 import com.maanit.stableshare.ui.components.SelectChip
@@ -123,7 +124,7 @@ fun HistoryScreen(vm: HistoryViewModel, onOpenDetail: (String) -> Unit) {
 }
 
 @Composable
-private fun HistoryRow(item: HistoryItem, onOpen: () -> Unit, onRemove: () -> Unit, modifier: Modifier = Modifier) {
+internal fun HistoryRow(item: HistoryItem, onOpen: () -> Unit, onRemove: () -> Unit, modifier: Modifier = Modifier) {
     val c = Neutral.colors
     val row = item.row
     val context = LocalContext.current
@@ -151,6 +152,10 @@ private fun HistoryRow(item: HistoryItem, onOpen: () -> Unit, onRemove: () -> Un
                     style = Neutral.type.meta,
                 )
                 Text(Format.dateTime(item.finishedAt), style = Neutral.type.meta)
+                if (item.instant) {
+                    Spacer(Modifier.height(4.dp))
+                    InstantPill()
+                }
             }
             Box {
                 IconButton(onClick = { menu = true }) {

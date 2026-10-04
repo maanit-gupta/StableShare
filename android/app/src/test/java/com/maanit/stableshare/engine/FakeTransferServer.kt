@@ -105,7 +105,7 @@ class FakeTransferServer : TransferApi {
     private fun newSession(request: CreateSessionRequest): Session {
         val original = if (instantUploads) {
             sessions.entries.firstOrNull { (_, s) ->
-                s.completedSha == request.sha256 && s.request.fileSize == request.fileSize
+                request.fileSize > 0 && s.completedSha == request.sha256 && s.request.fileSize == request.fileSize
             }?.key
         } else {
             null

@@ -103,6 +103,10 @@ fun TransferRow(
                     Spacer(Modifier.height(4.dp))
                     RestoredPill()
                 }
+                if (item.instant) {
+                    Spacer(Modifier.height(4.dp))
+                    InstantPill()
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 item.rowActions.forEach { action -> ActionIcon(action, item.name) { onAction(action) } }
@@ -157,7 +161,15 @@ private fun sizeLine(item: TransferItem): String =
     }
 
 @Composable
-fun RestoredPill(modifier: Modifier = Modifier) {
+fun RestoredPill(modifier: Modifier = Modifier) = InfoPill(stringResource(R.string.row_restored), modifier)
+
+/** "Already on server" (UI-SPEC §5.4.1): the transfer has an INSTANT_UPLOAD event. */
+@Composable
+fun InstantPill(modifier: Modifier = Modifier) = InfoPill(stringResource(R.string.row_instant), modifier)
+
+/** The 20 dp `neutral.pill` badge shared by the Restored and Already on server pills. */
+@Composable
+private fun InfoPill(text: String, modifier: Modifier = Modifier) {
     val c = Neutral.colors
     Box(
         modifier
@@ -167,7 +179,7 @@ fun RestoredPill(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            stringResource(R.string.row_restored),
+            text,
             fontFamily = Inter,
             fontSize = 11.sp,
             lineHeight = 14.sp,

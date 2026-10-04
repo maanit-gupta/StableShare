@@ -62,6 +62,7 @@
     <string name="row_size_progress">%1$s of %2$s</string>
     <string name="row_live">%1$s, %2$s left</string>
     <string name="row_restored">Restored after restart</string>
+    <string name="row_instant">Already on server</string>
     <string name="cd_pause">Pause %1$s</string>
     <string name="cd_resume">Resume %1$s</string>
     <string name="cd_retry">Retry %1$s</string>
@@ -152,6 +153,8 @@
     <string name="details_pieces_value">%1$d × %2$s</string>
     <string name="details_transfer_id">Transfer ID</string>
     <string name="details_server_id">Server ID</string>
+    <string name="details_data_sent">Data sent</string>
+    <string name="details_data_sent_none">None, the server already had this file</string>
     <string name="details_saved_to">Saved to</string>
     <string name="details_picked_file">Picked file</string>
     <string name="details_generated_file">Generated test file</string>
@@ -369,4 +372,5 @@
     <string name="act_retry_scheduled">Trying again in %1$d s (attempt %2$d of %3$d)</string>
     <string name="act_verified">Checksum verified</string>
     <string name="act_restored">Restored after the app restarted</string>
+    <string name="act_instant_upload">The server already had this exact file, so nothing needed sending</string>
 </resources>

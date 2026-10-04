@@ -90,13 +90,13 @@ class UploadViewModel(
     }
 
     val rows: StateFlow<List<UploadRow>> = combine(
-        repo.observeTransfers(),
+        combine(repo.observeTransfers(), repo.observeInstantUploadIds(), ::Pair),
         combine(progress, wifiGated, ::Pair),
         restored,
         revealed,
         ticker,
-    ) { all, (live, gated), restoredIds, ids, now ->
-        val items = TransferItem.buildAll(all, live, restoredIds, now, gated).associateBy { it.id }
+    ) { (all, instantIds), (live, gated), restoredIds, ids, now ->
+        val items = TransferItem.buildAll(all, live, restoredIds, now, gated, instantIds).associateBy { it.id }
         ids.mapNotNull { id -> items[id]?.let { UploadRow(it, files.isGeneratedFile(it.row.localUri)) } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

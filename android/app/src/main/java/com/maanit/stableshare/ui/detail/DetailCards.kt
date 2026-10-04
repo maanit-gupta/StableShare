@@ -303,6 +303,9 @@ private fun DetailRows(ui: DetailUi) {
     Field(stringResource(R.string.details_direction), stringResource(if (isDownload) R.string.details_direction_download else R.string.details_direction_upload))
     Field(stringResource(R.string.details_size), stringResource(R.string.details_size_bytes, Format.exactBytes(row.fileSize)))
     Field(stringResource(R.string.details_pieces), stringResource(R.string.details_pieces_value, row.totalChunks, Format.size(row.chunkSize.toLong())))
+    if (ui.item.instant) {
+        Field(stringResource(R.string.details_data_sent), stringResource(R.string.details_data_sent_none))
+    }
     Field(stringResource(R.string.details_transfer_id), row.id, mono = true, copy = true)
     Field(stringResource(R.string.details_server_id), row.remoteId ?: notYet, mono = row.remoteId != null, copy = row.remoteId != null)
     Field(
