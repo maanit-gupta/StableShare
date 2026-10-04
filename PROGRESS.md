@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.1a Wi-Fi only: engine and tests** (`plan/6a-wifi-only.md`). Wi-Fi only already shipped (see Gotchas): diff the plan against the code first.
+Next step: **6.1b Wi-Fi only: UI, copy and docs** (`plan/6a-wifi-only.md`). Like 6.1a, it most likely shipped already (commits 90dd329, 2eda46b): diff the plan against the code and UI-SPEC first.
 Before it (user, optional): push `phase-5-safety-net`, confirm CI is green with the fuzz tests, and run Actions → "Chaos test" once.
 
 ## Checklist
@@ -19,7 +19,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 5.2 Model-based and fuzz tests (2026-10-04: `fuzz/RepositoryModelTest`, `fuzz/EngineFuzzTest`; both green at 200 and 2000 seeds; 1 bug found and fixed)
 
 ### Phase 6 — Features
-- [ ] 6.1a Wi-Fi only: engine and tests (`plan/6a-wifi-only.md`)
+- [x] 6.1a Wi-Fi only: engine and tests (`plan/6a-wifi-only.md`) (2026-10-04: already shipped in d7f485c; every behaviour and tests (a)–(i) present in WifiOnlyTest, NetworkGuardTest, ErrorClassifierTest, WakeupPlanTest, WorkManagerSchedulerTest; DESIGN §7/§9 cover it; 285 JVM tests green; no code change)
 - [ ] 6.1b Wi-Fi only: UI, copy and docs
 - [ ] 6.2a Instant upload: server (`plan/6b-instant-upload.md`)
 - [ ] 6.2b Instant upload: client and UI
@@ -59,7 +59,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 ## Gotchas (short, durable facts that save re-discovery)
 
 - The plan arrived in `StableShare-masterplan/`; moved to the repo root (MASTER-PLAN.md, PROGRESS.md, plan/, .claude/commands/next.md). Work is on branch `phase-5-safety-net`, cut from `feature-1-wifi-only`; local `main` is 8 commits behind it.
-- Wi-Fi only already shipped before this plan (CLAUDE.md "Feature 1", commits d7f485c, 90dd329, 2eda46b). At 6.1a/6.1b, diff the plan against the existing code before building anything.
+- Wi-Fi only already shipped before this plan (CLAUDE.md "Feature 1", commits d7f485c, 90dd329, 2eda46b). At 6.1a/6.1b, diff the plan against the existing code before building anything. Code vs plan 6a: DataStore key is `wifi_only` (not `wifiOnly`); the proactive stop is per request (NetworkGuard/GuardedTransferApi), not a job-level watcher; promotion lives in EngineBootstrap (`promoteWaitingForNetwork`) and the coordinator.
 - JDK: Gradle daemon toolchain is pinned to 25 (`android/gradle/gradle-daemon-jvm.properties`); CI uses temurin 25. Node LTS used in CI: 24.
 - Job-level `env:` cannot use the `runner` context (GitHub rejects the file and logs a 0 s failed run on every push); put `${{ runner.* }}` in step env. Lint with actionlint (download script → scratchpad).
 - Action majors (checked 2026-10-04): checkout@v7, setup-node@v7, setup-java@v6, gradle/actions/setup-gradle@v6, upload-artifact@v7.
