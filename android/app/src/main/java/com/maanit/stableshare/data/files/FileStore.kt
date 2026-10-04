@@ -95,7 +95,7 @@ open class FileStore(
      * source's size (or a known mtime) differs from what was recorded, or it is shorter than
      * expected, and [SourceMissingException] if it cannot be opened.
      */
-    suspend fun readChunk(
+    open suspend fun readChunk(
         uri: Uri,
         offset: Long,
         length: Int,

@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.mapNotNull
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 /**
@@ -61,13 +62,47 @@ class FakeConnectivity(state: NetworkState = NetworkState.Unmetered, wifiOnly: B
     }
 }
 
-/** Disk-full simulation for [FileStore.writeChunkAt]. */
+/** Disk-full simulation for [FileStore.writeChunkAt], plus hooks that see chunk buffers come and go. */
 class FullDiskFileStore(context: Context, downloads: File, generated: File, io: CoroutineDispatcher = Dispatchers.IO) :
     FileStore(context, downloads, generated, io) {
     @Volatile var full = false
+
+    /** Runs after an upload chunk was read into memory. */
+    @Volatile var onChunkRead: () -> Unit = {}
+
+    /** Runs after a download chunk's write ended (written and synced, or failed). */
+    @Volatile var onChunkWritten: () -> Unit = {}
+
     override suspend fun writeChunkAt(part: File, offset: Long, bytes: ByteArray) {
-        if (full) throw java.io.IOException("write failed: ENOSPC (No space left on device)")
-        super.writeChunkAt(part, offset, bytes)
+        try {
+            if (full) throw java.io.IOException("write failed: ENOSPC (No space left on device)")
+            super.writeChunkAt(part, offset, bytes)
+        } finally {
+            onChunkWritten()
+        }
+    }
+
+    override suspend fun readChunk(uri: Uri, offset: Long, length: Int, expectedSize: Long, expectedLastModified: Long?) =
+        super.readChunk(uri, offset, length, expectedSize, expectedLastModified).also { onChunkRead() }
+}
+
+/**
+ * Chunk buffers alive at once: an upload chunk from its read until its request ends, a download
+ * chunk from its response until its write ends. Valid for runs without faults that drop a buffer
+ * on another path (a corrupt body is never written).
+ */
+class BufferMeter(h: EngineHarness) {
+    private val live = AtomicInteger()
+    val peak = AtomicInteger()
+
+    init {
+        h.files.onChunkRead = ::acquire
+        h.files.onChunkWritten = { live.decrementAndGet() }
+        h.server.onChunkBody = { op, ended -> if (op == FakeTransferServer.Op.CHUNK && ended) live.decrementAndGet() else acquire() }
+    }
+
+    private fun acquire() {
+        peak.accumulateAndGet(live.incrementAndGet(), ::maxOf)
     }
 }
 

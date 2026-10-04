@@ -22,13 +22,15 @@ data class LiveProgress(
     val phase: TransferPhase,
     /** bytesDone as last committed to the database. */
     val committedBytes: Long,
-    /** Bytes of the current chunk sent or received so far (not yet DONE). */
+    /** Bytes of the chunks in flight sent or received so far (not yet DONE), summed. */
     val inFlightBytes: Long,
-    /** Index of the chunk currently moving, or null between chunks, while backing off or hashing. */
+    /** Index of the chunk currently moving (the lowest one when several are), or null between chunks, while backing off or hashing. */
     val inFlightChunk: Int? = null,
     val totalBytes: Long,
     val bytesPerSecond: Double,
     val etaSeconds: Long?,
+    /** Parallel chunks (DESIGN.md §6.4): bytes moved so far per in-flight chunk index. */
+    val inFlightChunks: Map<Int, Long> = emptyMap(),
 ) {
     /** What the UI shows: committed chunks plus the chunk in flight. */
     val bytes: Long get() = (committedBytes + inFlightBytes).coerceAtMost(totalBytes)
@@ -61,18 +63,47 @@ class TransferProgressTracker(
 
     /** Leaving the Transferring phase means no chunk is moving any more. */
     fun setPhase(id: String, phase: TransferPhase) = modify(id) {
-        it.copy(phase = phase, inFlightChunk = if (phase == TransferPhase.Transferring) it.inFlightChunk else null)
+        if (phase == TransferPhase.Transferring) {
+            it.copy(phase = phase)
+        } else {
+            it.copy(phase = phase, inFlightChunk = null, inFlightChunks = emptyMap())
+        }
     }
 
     /** A chunk was committed: [committedBytes] is the new bytesDone and nothing is in flight. */
     fun setCommitted(id: String, committedBytes: Long) = modify(id) {
-        it.copy(committedBytes = committedBytes, inFlightBytes = 0, inFlightChunk = null)
+        it.copy(committedBytes = committedBytes, inFlightBytes = 0, inFlightChunk = null, inFlightChunks = emptyMap())
     }
 
-    /** [bytes] of chunk [chunkIndex] have moved so far; a null index means nothing is moving. */
+    /**
+     * One chunk at a time: [bytes] of chunk [chunkIndex] have moved so far, replacing whatever was
+     * in flight; a null index means nothing is moving.
+     */
     fun setInFlight(id: String, bytes: Long, chunkIndex: Int? = null) = modify(id) {
-        it.copy(inFlightBytes = bytes, inFlightChunk = chunkIndex)
+        it.copy(
+            inFlightBytes = bytes,
+            inFlightChunk = chunkIndex,
+            inFlightChunks = if (chunkIndex == null) emptyMap() else mapOf(chunkIndex to bytes),
+        )
     }
+
+    /** Parallel chunks: [bytes] of chunk [chunkIndex] have moved so far; other in-flight chunks are kept. */
+    fun setChunkInFlight(id: String, chunkIndex: Int, bytes: Long) = modify(id) {
+        withChunks(it, it.inFlightChunks + (chunkIndex to bytes))
+    }
+
+    /** Parallel chunks: chunk [chunkIndex] stopped moving without being committed (retry, backoff). */
+    fun dropChunkInFlight(id: String, chunkIndex: Int) = modify(id) {
+        withChunks(it, it.inFlightChunks - chunkIndex)
+    }
+
+    /** Parallel chunks: chunk [chunkIndex] is DONE and bytesDone is now [committedBytes]; the others keep moving. */
+    fun chunkCommitted(id: String, chunkIndex: Int, committedBytes: Long) = modify(id) {
+        withChunks(it.copy(committedBytes = committedBytes), it.inFlightChunks - chunkIndex)
+    }
+
+    private fun withChunks(p: LiveProgress, chunks: Map<Int, Long>) =
+        p.copy(inFlightChunks = chunks, inFlightBytes = chunks.values.sum(), inFlightChunk = chunks.keys.minOrNull())
 
     fun clear(id: String) = synchronized(lock) {
         speeds.remove(id)

@@ -23,6 +23,8 @@ data class Settings(
     val wifiOnly: Boolean = false,
     /** Set once the first-run intro was finished or skipped (UI-SPEC §5.2). */
     val onboardingCompleted: Boolean = false,
+    /** Chunks in flight at once within one transfer (1, 2 or 4); read once when a job starts. */
+    val parallelChunks: Int = SettingsRepository.DEFAULT_PARALLEL_CHUNKS,
 )
 
 /** User settings in DataStore. Values are validated on write and sanitised again on read. */
@@ -39,6 +41,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
                 autoRetryEnabled = prefs[KEY_AUTO_RETRY] ?: true,
                 wifiOnly = prefs[KEY_WIFI_ONLY] ?: false,
                 onboardingCompleted = prefs[KEY_ONBOARDING_COMPLETED] ?: false,
+                parallelChunks = prefs[KEY_PARALLEL_CHUNKS]?.takeIf { it in ALLOWED_PARALLEL_CHUNKS }
+                    ?: DEFAULT_PARALLEL_CHUNKS,
             )
         }
         .distinctUntilChanged()
@@ -70,6 +74,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[KEY_WIFI_ONLY] = enabled }
     }
 
+    suspend fun setParallelChunks(value: Int) {
+        require(value in ALLOWED_PARALLEL_CHUNKS) { "parallel chunks must be one of $ALLOWED_PARALLEL_CHUNKS" }
+        store.edit { it[KEY_PARALLEL_CHUNKS] = value }
+    }
+
     suspend fun setOnboardingCompleted(completed: Boolean) {
         store.edit { it[KEY_ONBOARDING_COMPLETED] = completed }
     }
@@ -82,6 +91,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         private const val MIB = 1024 * 1024
         const val DEFAULT_CHUNK_SIZE = 2 * MIB
         val ALLOWED_CHUNK_SIZES = listOf(1 * MIB, 2 * MIB, 5 * MIB)
+        const val DEFAULT_PARALLEL_CHUNKS = 1
+        val ALLOWED_PARALLEL_CHUNKS = listOf(1, 2, 4)
 
         private val KEY_SERVER_URL = stringPreferencesKey("server_url")
         private val KEY_MAX_CONCURRENT = intPreferencesKey("max_concurrent")
@@ -89,6 +100,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         private val KEY_AUTO_RETRY = booleanPreferencesKey("auto_retry_enabled")
         private val KEY_WIFI_ONLY = booleanPreferencesKey("wifi_only")
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        private val KEY_PARALLEL_CHUNKS = intPreferencesKey("parallel_chunks")
 
         /** Trims, adds http:// when no scheme is given, drops a trailing slash; null if invalid. */
         fun normalizeServerUrl(input: String): String? {

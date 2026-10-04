@@ -119,4 +119,18 @@ class SettingsRepositoryTest {
         repo.setWifiOnly(false)
         assertFalse(repo.current().wifiOnly)
     }
+
+    @Test
+    fun parallelChunksIsOneByDefaultOnlyAcceptsOneTwoOrFourAndPersists() = runBlocking {
+        assertEquals(1, repo.current().parallelChunks)
+        repo.setParallelChunks(4)
+        assertEquals(4, SettingsRepository(store).current().parallelChunks)
+        repo.setParallelChunks(2)
+        assertEquals(2, repo.current().parallelChunks)
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { repo.setParallelChunks(3) } }
+        assertEquals(2, repo.current().parallelChunks)
+        // A stored value outside 1/2/4 (older or corrupt data) falls back to the default.
+        store.edit { it[intPreferencesKey("parallel_chunks")] = 8 }
+        assertEquals(1, repo.current().parallelChunks)
+    }
 }

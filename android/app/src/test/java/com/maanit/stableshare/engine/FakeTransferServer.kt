@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * In-memory implementation of the server protocol (DESIGN.md §3) with the same semantics as
@@ -73,6 +74,15 @@ class FakeTransferServer : TransferApi {
     /** Requests currently suspended in [onRequest] (for concurrency tests). */
     val inFlight = MutableStateFlow(0)
 
+    /** CHUNK and RANGE requests running right now, from arrival until they answer or fail. */
+    val activeChunkRequests = AtomicInteger()
+
+    /** The most CHUNK/RANGE requests ever running at once. */
+    val peakChunkRequests = AtomicInteger()
+
+    /** Runs when a CHUNK request ends (answered or failed) and when a RANGE request answers with a body. */
+    @Volatile var onChunkBody: (Op, ended: Boolean) -> Unit = { _, _ -> }
+
     fun count(op: Op, index: Int? = null, id: String? = null): Int =
         calls.count { it.op == op && (index == null || it.index == index) && (id == null || it.id == id) }
 
@@ -119,6 +129,20 @@ class FakeTransferServer : TransferApi {
         if (s.completedSha != null) (0 until totalChunks(s.request)).toList() else s.chunks.keys.sorted()
 
     override suspend fun uploadChunk(
+        uploadId: String,
+        index: Int,
+        bytes: ByteArray,
+        sha256: String,
+        onProgress: (Long) -> Unit,
+    ): ChunkUploadResponse = chunkRequest {
+        try {
+            uploadChunkNow(uploadId, index, bytes, sha256, onProgress)
+        } finally {
+            onChunkBody(Op.CHUNK, true)
+        }
+    }
+
+    private suspend fun uploadChunkNow(
         uploadId: String,
         index: Int,
         bytes: ByteArray,
@@ -209,6 +233,16 @@ class FakeTransferServer : TransferApi {
         length: Int,
         etag: String,
         onProgress: (Long) -> Unit,
+    ): RangeBody = chunkRequest {
+        downloadRangeNow(fileId, offset, length, etag, onProgress).also { onChunkBody(Op.RANGE, false) }
+    }
+
+    private suspend fun downloadRangeNow(
+        fileId: String,
+        offset: Long,
+        length: Int,
+        etag: String,
+        onProgress: (Long) -> Unit,
     ): RangeBody {
         val blob = blobs[fileId]
         val index = blob?.let { chunkIndexOf(offset) }
@@ -242,6 +276,16 @@ class FakeTransferServer : TransferApi {
             inFlight.update { it - 1 }
         }
         return call
+    }
+
+    private inline fun <T> chunkRequest(block: () -> T): T {
+        val now = activeChunkRequests.incrementAndGet()
+        peakChunkRequests.accumulateAndGet(now, ::maxOf)
+        try {
+            return block()
+        } finally {
+            activeChunkRequests.decrementAndGet()
+        }
     }
 
     private inline fun <T> respond(call: Call, block: () -> T): T {

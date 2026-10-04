@@ -46,8 +46,12 @@ class DownloadPipeline(
         private val expectedSha = requireNotNull(initial.sha256) { "download without a sha256" }
         private var verifyFailures = 0
 
+        /** Chunks in flight at once (DESIGN.md §6.4); read once, fixed for this job. */
+        private var parallel = 1
+
         suspend fun execute() {
             tracker.start(id, t.bytesDone, t.fileSize)
+            parallel = env.settings().parallelChunks
             val existing = File(requireNotNull(Uri.parse(t.localUri).path))
             if (!existing.name.endsWith(PART_SUFFIX) && existing.isFile) {
                 // A previous run renamed the verified part file but died before COMPLETED.
@@ -70,9 +74,14 @@ class DownloadPipeline(
             reverifyTail(part)
             commitProgress()
 
-            for (chunk in repo.getChunks(id).filter { it.status != ChunkStatus.DONE }) {
-                currentCoroutineContext().ensureActive()
-                fetchChunk(part, chunk)
+            val pending = repo.getChunks(id).filter { it.status != ChunkStatus.DONE }
+            if (parallel == 1) {
+                for (chunk in pending) {
+                    currentCoroutineContext().ensureActive()
+                    fetchChunk(part, chunk)
+                }
+            } else {
+                forEachChunkInParallel(pending, parallel) { fetchChunkInParallel(part, it) }
             }
 
             runner.enterVerifying()
@@ -108,11 +117,12 @@ class DownloadPipeline(
         }
 
         /**
-         * Step 2: re-hash the last [TAIL_REVERIFY] DONE chunks on disk. They are the ones a crash or
-         * a lost fsync could have torn; anything older is caught by the full-file check.
+         * Step 2: re-hash the [TAIL_REVERIFY] × N DONE chunks with the highest indices on disk. They
+         * are the ones a crash or a lost fsync could have torn (up to N were written at once);
+         * anything older is caught by the full-file check.
          */
         private suspend fun reverifyTail(part: File) {
-            val tail = repo.getChunks(id).filter { it.status == ChunkStatus.DONE }.takeLast(TAIL_REVERIFY)
+            val tail = repo.getChunks(id).filter { it.status == ChunkStatus.DONE }.takeLast(TAIL_REVERIFY * parallel)
             val bad = tail.filterNot { files.verifyChunkOnDisk(part, it.offset, it.length, requireNotNull(it.sha256)) }
             if (bad.isNotEmpty()) {
                 repo.resetChunks(id, bad.map { it.index })
@@ -132,6 +142,24 @@ class DownloadPipeline(
             }
             if (!repo.markChunkDone(id, chunk.index, null)) throw PipelineSignal.Stop("not TRANSFERRING")
             commitProgress()
+        }
+
+        /**
+         * [fetchChunk] for N > 1: same order (hash check → positional write + fsync → DONE), but
+         * the chunk retries in place while the transfer stays TRANSFERRING. Each write opens the
+         * part file, writes at the chunk's offset and syncs, so parallel writers never overlap.
+         */
+        private suspend fun fetchChunkInParallel(part: File, chunk: ChunkEntity) {
+            val expected = requireNotNull(chunk.sha256)
+            runner.runChunkInPlace(chunk.index, onBackoff = { tracker.dropChunkInFlight(id, chunk.index) }) {
+                val body = api.downloadRange(fileId, chunk.offset, chunk.length, etag) { tracker.setChunkInFlight(id, chunk.index, it) }
+                if (!body.sha256.equals(expected, ignoreCase = true)) {
+                    throw ChunkHashMismatchException(chunk.index, expected, body.sha256)
+                }
+                files.writeChunkAt(part, chunk.offset, body.bytes)
+            }
+            if (!repo.markChunkDone(id, chunk.index, null)) throw PipelineSignal.Stop("not TRANSFERRING")
+            repo.getTransfer(id)?.let { tracker.chunkCommitted(id, chunk.index, it.bytesDone) }
         }
 
         /**

@@ -89,4 +89,35 @@ class TransferProgressTrackerTest {
         tracker.setPhase("t", TransferPhase.Retrying(9_000))
         assertNull(tracker.progress.value.getValue("t").inFlightChunk)
     }
+
+    @Test
+    fun parallelChunksSumTheirBytesAndCommitOneAtATime() {
+        tracker.start("t", 0, 10_000)
+        tracker.setChunkInFlight("t", 3, 200)
+        tracker.setChunkInFlight("t", 1, 300)
+        tracker.setChunkInFlight("t", 3, 400)
+        var p = tracker.progress.value.getValue("t")
+        assertEquals(700, p.inFlightBytes)
+        assertEquals(mapOf(1 to 300L, 3 to 400L), p.inFlightChunks)
+        assertEquals("the lowest index stands for the map", 1, p.inFlightChunk)
+
+        tracker.chunkCommitted("t", 1, committedBytes = 1_000)
+        p = tracker.progress.value.getValue("t")
+        assertEquals(1_000, p.committedBytes)
+        assertEquals(400, p.inFlightBytes)
+        assertEquals(1_400, p.bytes)
+        assertEquals(3, p.inFlightChunk)
+
+        now = 1_000
+        tracker.setChunkInFlight("t", 5, 600)
+        p = tracker.progress.value.getValue("t")
+        assertEquals("speed is over the total of all chunks", 2_000.0, p.bytesPerSecond, 0.001)
+
+        tracker.dropChunkInFlight("t", 3)
+        assertEquals(600, tracker.progress.value.getValue("t").inFlightBytes)
+        tracker.setPhase("t", TransferPhase.WaitingForNetwork)
+        p = tracker.progress.value.getValue("t")
+        assertTrue(p.inFlightChunks.isEmpty())
+        assertNull(p.inFlightChunk)
+    }
 }

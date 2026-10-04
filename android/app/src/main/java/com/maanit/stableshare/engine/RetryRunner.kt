@@ -12,6 +12,8 @@ import com.maanit.stableshare.domain.RetryPolicy
 import com.maanit.stableshare.domain.StateMachine
 import com.maanit.stableshare.domain.TransferState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Everything a pipeline needs besides the protocol and the file store. */
@@ -66,6 +68,9 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
     private val repo get() = env.repo
     private val stepFailures = HashMap<Step.Named, Int>()
 
+    /** Parallel chunks: the first worker to reach a terminal outcome writes the state; the rest find it written. */
+    private val terminal = Mutex()
+
     /**
      * Runs [block] until it succeeds. On an error, [recover] may turn the failure into a result
      * (the lost-response check, DESIGN.md §8). Otherwise a retryable error backs off and retries
@@ -92,6 +97,69 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
             if (recover != null) recover(outcome)?.let { return it }
             handleFailure(step, outcome, describe(error, outcome))
             if (!retryInPlace) throw PipelineSignal.Restart("retrying $step from the top")
+        }
+    }
+
+    /**
+     * Parallel chunks (N > 1, DESIGN.md §7): runs chunk [index] until it succeeds, with its own
+     * persisted attempt counter and the same [RetryPolicy], but the backoff happens in place while
+     * the transfer stays TRANSFERRING, so sibling chunks can still be marked DONE (rule 5). Only
+     * the terminal outcomes write state, one worker at a time: Fatal or an exhausted chunk →
+     * FAILED, no usable network → RETRYING. Each throws [PipelineSignal.Stop], which cancels the
+     * siblings; a worker arriving second finds the row no longer active and only stops.
+     * [onBackoff] runs when a backoff starts (the chunk is no longer moving).
+     */
+    suspend fun <T> runChunkInPlace(
+        index: Int,
+        recover: (suspend (Outcome) -> T?)? = null,
+        onBackoff: () -> Unit = {},
+        block: suspend () -> T,
+    ): T {
+        val step = Step.Chunk(index)
+        while (true) {
+            val error = try {
+                return block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PipelineSignal) {
+                throw e
+            } catch (e: Throwable) {
+                e
+            }
+            val outcome = classify(error)
+            if (recover != null) recover(outcome)?.let { return it }
+            val message = describe(error, outcome)
+            when (outcome) {
+                is Outcome.Fatal -> {
+                    repo.markChunkFailed(id, index, "${outcome.code}: $message")
+                    terminal.withLock { fail(outcome.code, message) }
+                }
+                is Outcome.WaitForNetwork -> terminal.withLock { waitForNetwork(outcome.code, message) }
+                is Outcome.Retryable -> {
+                    if (!repo.markChunkFailed(id, index, "${outcome.code}: $message")) throw PipelineSignal.Stop("not TRANSFERRING")
+                    if (!env.settings().autoRetryEnabled) terminal.withLock { fail(outcome.code, "$message (automatic retry is off)") }
+                    val failures = repo.incrementAttempts(id, index) ?: throw PipelineSignal.Stop("not active")
+                    if (!env.retryPolicy.canRetry(failures)) {
+                        terminal.withLock {
+                            fail(ErrorCode.RETRIES_EXHAUSTED, "${label(step)} failed $failures times; last error ${outcome.code}: $message")
+                        }
+                    }
+                    val delayMs = env.retryPolicy.delayHonouringRetryAfter(failures, outcome.retryAfterMs)
+                    if (!repo.logEventWhile(
+                            id, IN_PLACE_STATES, EventType.RETRY_SCHEDULED,
+                            "${label(step)} attempt $failures failed (${outcome.code}); retrying it in $delayMs ms",
+                            chunkIndex = index,
+                        )
+                    ) {
+                        throw PipelineSignal.Stop("not TRANSFERRING")
+                    }
+                    onBackoff()
+                    val blocked = env.network.sleep(delayMs, env.sleep)
+                    if (blocked != null) {
+                        terminal.withLock { waitForNetwork(blocked, "Network became unusable ($blocked) during a chunk backoff") }
+                    }
+                }
+            }
         }
     }
 
@@ -212,5 +280,6 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
 
     private companion object {
         const val TAG = "StableShare"
+        val IN_PLACE_STATES = setOf(TransferState.TRANSFERRING)
     }
 }

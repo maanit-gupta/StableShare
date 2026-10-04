@@ -52,8 +52,12 @@ class UploadPipeline(
         private var sessionRecreated = false
         private var missingResyncs = 0
 
+        /** Chunks in flight at once (DESIGN.md §6.4); read once, fixed for this job. */
+        private var parallel = 1
+
         suspend fun execute() {
             tracker.start(id, t.bytesDone, t.fileSize)
+            parallel = env.settings().parallelChunks
             prepareSource()
             while (true) {
                 try {
@@ -130,9 +134,14 @@ class UploadPipeline(
             if (!repo.applyServerReceivedChunks(id, status.receivedChunks)) throw PipelineSignal.Stop("not active")
             commitProgress()
 
-            for (chunk in repo.getChunks(id).filter { it.status != ChunkStatus.DONE }) {
-                currentCoroutineContext().ensureActive()
-                sendChunk(chunk.index, chunk.offset, chunk.length)
+            val pending = repo.getChunks(id).filter { it.status != ChunkStatus.DONE }
+            if (parallel == 1) {
+                for (chunk in pending) {
+                    currentCoroutineContext().ensureActive()
+                    sendChunk(chunk.index, chunk.offset, chunk.length)
+                }
+            } else {
+                forEachChunkInParallel(pending, parallel) { sendChunkInParallel(it.index, it.offset, it.length) }
             }
 
             runner.enterVerifying()
@@ -187,6 +196,33 @@ class UploadPipeline(
             }
             if (!repo.markChunkDone(id, index, sha)) throw PipelineSignal.Stop("not TRANSFERRING")
             commitProgress()
+        }
+
+        /**
+         * [sendChunk] for N > 1: the chunk is read only once this worker holds its permit, retries
+         * in place while the transfer stays TRANSFERRING, and its progress is tracked per index.
+         */
+        private suspend fun sendChunkInParallel(index: Int, offset: Long, length: Int) {
+            var bodySent = false
+            var sentSha: String? = null
+            val sha = runner.runChunkInPlace(
+                index,
+                recover = { outcome -> if (outcome.isAmbiguous && bodySent) confirmedViaStatus(index, sentSha) else null },
+                onBackoff = { tracker.dropChunkInFlight(id, index) },
+            ) {
+                bodySent = false
+                val data = files.readChunk(uri, offset, length, t.fileSize, t.sourceLastModified)
+                sentSha = data.sha256
+                session {
+                    api.uploadChunk(id, index, data.bytes, data.sha256) { sent ->
+                        tracker.setChunkInFlight(id, index, sent)
+                        if (sent >= length) bodySent = true
+                    }
+                }
+                data.sha256
+            }
+            if (!repo.markChunkDone(id, index, sha)) throw PipelineSignal.Stop("not TRANSFERRING")
+            repo.getTransfer(id)?.let { tracker.chunkCommitted(id, index, it.bytesDone) }
         }
 
         /**
