@@ -34,8 +34,9 @@ object StateMachine {
     fun isTerminal(state: TransferState): Boolean = transitions.getValue(state).isEmpty()
 
     /** States in which a transfer is owned by (or waiting on) the engine. */
-    fun isActive(state: TransferState): Boolean =
-        state == TRANSFERRING || state == RETRYING || state == VERIFYING
+    val ACTIVE: Set<TransferState> = setOf(TRANSFERRING, RETRYING, VERIFYING)
+
+    fun isActive(state: TransferState): Boolean = state in ACTIVE
 
     fun allowedActions(state: TransferState): Set<TransferAction> = when (state) {
         QUEUED, TRANSFERRING, RETRYING -> setOf(TransferAction.PAUSE, TransferAction.CANCEL)

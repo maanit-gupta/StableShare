@@ -11,6 +11,7 @@ import com.maanit.stableshare.data.net.isAmbiguous
 import com.maanit.stableshare.domain.ChunkStatus
 import com.maanit.stableshare.domain.ErrorCode
 import com.maanit.stableshare.domain.EventType
+import com.maanit.stableshare.domain.StateMachine
 import com.maanit.stableshare.domain.TransferState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -61,7 +62,7 @@ class UploadPipeline(
                 } catch (e: PipelineSignal.SessionLost) {
                     if (sessionRecreated) runner.fail(ErrorCode.SESSION_NOT_FOUND, "Upload session lost twice: ${e.message}")
                     sessionRecreated = true
-                    repo.logEvent(id, EventType.INFO, "Server lost the upload session (${e.message}); recreating it once")
+                    repo.logEventWhile(id, StateMachine.ACTIVE, EventType.INFO, "Server lost the upload session (${e.message}); recreating it once")
                     ensureTransferring(ErrorCode.SESSION_NOT_FOUND, "Upload session lost; recreating it")
                     repo.setSessionCreated(id, false)
                 } catch (e: PipelineSignal.MissingChunks) {
@@ -166,8 +167,8 @@ class UploadPipeline(
             if (sha == null) return null
             val status = quietly { api.getUploadStatus(id) } ?: return null
             if (index !in status.receivedChunks) return null
-            repo.logEvent(
-                id, EventType.CHUNK_CONFIRMED_AFTER_LOST_RESPONSE,
+            repo.logEventWhile(
+                id, StateMachine.ACTIVE, EventType.CHUNK_CONFIRMED_AFTER_LOST_RESPONSE,
                 "Chunk $index: response lost, but GET status lists it; not resending",
                 chunkIndex = index,
             )
@@ -178,7 +179,7 @@ class UploadPipeline(
         private suspend fun completedViaStatus(): String? {
             val status = quietly { api.getUploadStatus(id) } ?: return null
             if (!status.isCompleted || status.sha256 == null) return null
-            repo.logEvent(id, EventType.INFO, "complete: response lost, but GET status says COMPLETED")
+            repo.logEventWhile(id, StateMachine.ACTIVE, EventType.INFO, "complete: response lost, but GET status says COMPLETED")
             return status.sha256
         }
 
@@ -188,7 +189,7 @@ class UploadPipeline(
             if (!serverSha.equals(expected, ignoreCase = true)) {
                 runner.fail(ErrorCode.FILE_HASH_MISMATCH, "Server hash $serverSha differs from local $expected")
             }
-            repo.logEvent(id, EventType.VERIFIED, "Server verified SHA-256 $serverSha")
+            repo.logEventWhile(id, StateMachine.ACTIVE, EventType.VERIFIED, "Server verified SHA-256 $serverSha")
             if (!repo.transition(id, TransferState.COMPLETED, expectedFrom = TransferState.VERIFYING)) {
                 throw PipelineSignal.Stop("lost CAS VERIFYING → COMPLETED")
             }

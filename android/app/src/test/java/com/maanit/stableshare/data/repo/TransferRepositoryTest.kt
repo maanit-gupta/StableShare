@@ -526,6 +526,23 @@ class TransferRepositoryTest {
         assertEquals(2_000L, repo.getTransfer(id)!!.bytesDone)
     }
 
+    // ---- events ----
+
+    /** Fuzz regression (engine seed 1346): a RETRY_SCHEDULED log landed after a concurrent cancel. */
+    @Test
+    fun logEventWhileWritesNothingOnceTheRowLeftTheGivenStates() = runBlocking {
+        val id = upload()
+        moveTo(id, TRANSFERRING, RETRYING)
+        assertTrue(repo.logEventWhile(id, StateMachine.ACTIVE, EventType.RETRY_SCHEDULED, "retrying"))
+        moveTo(id, CANCELLED)
+        val before = repo.getEvents(id)
+
+        assertFalse(repo.logEventWhile(id, StateMachine.ACTIVE, EventType.RETRY_SCHEDULED, "late"))
+        assertFalse(repo.logEventWhile("missing", StateMachine.ACTIVE, EventType.INFO, "no row"))
+        assertEquals(before, repo.getEvents(id))
+        assertEquals(CANCELLED, before.last().toState)
+    }
+
     // ---- deletion ----
 
     @Test

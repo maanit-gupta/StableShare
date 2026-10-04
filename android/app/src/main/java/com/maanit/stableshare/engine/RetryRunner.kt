@@ -9,6 +9,7 @@ import com.maanit.stableshare.data.settings.Settings
 import com.maanit.stableshare.domain.ErrorCode
 import com.maanit.stableshare.domain.EventType
 import com.maanit.stableshare.domain.RetryPolicy
+import com.maanit.stableshare.domain.StateMachine
 import com.maanit.stableshare.domain.TransferState
 import kotlinx.coroutines.delay
 import kotlin.coroutines.cancellation.CancellationException
@@ -152,8 +153,8 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
         if (!repo.transition(id, TransferState.RETRYING, code, message, nextRetryAt = at, expectedFrom = from)) {
             throw PipelineSignal.Stop("lost CAS → RETRYING")
         }
-        repo.logEvent(
-            id, EventType.RETRY_SCHEDULED,
+        repo.logEventWhile(
+            id, StateMachine.ACTIVE, EventType.RETRY_SCHEDULED,
             "${label(step)} attempt $failures failed ($code); retrying in $delayMs ms",
             chunkIndex = (step as? Step.Chunk)?.index,
         )

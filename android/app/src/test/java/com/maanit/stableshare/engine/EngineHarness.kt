@@ -14,6 +14,7 @@ import com.maanit.stableshare.domain.EventType
 import com.maanit.stableshare.domain.RetryPolicy
 import com.maanit.stableshare.domain.TransferState
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -61,8 +62,8 @@ class FakeConnectivity(state: NetworkState = NetworkState.Unmetered, wifiOnly: B
 }
 
 /** Disk-full simulation for [FileStore.writeChunkAt]. */
-class FullDiskFileStore(context: Context, downloads: File, generated: File) :
-    FileStore(context, downloads, generated, Dispatchers.IO) {
+class FullDiskFileStore(context: Context, downloads: File, generated: File, io: CoroutineDispatcher = Dispatchers.IO) :
+    FileStore(context, downloads, generated, io) {
     @Volatile var full = false
     override suspend fun writeChunkAt(part: File, offset: Long, bytes: ByteArray) {
         if (full) throw java.io.IOException("write failed: ENOSPC (No space left on device)")
@@ -84,10 +85,11 @@ class EngineHarness(
     val db: AppDatabase = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build(),
     settings: Settings = Settings(maxConcurrent = 2, uploadChunkSizeBytes = CHUNK),
     sleep: (suspend (Long) -> Unit)? = null,
+    io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     val settings = MutableStateFlow(settings)
     val repo = TransferRepository(db, clock)
-    val files = FullDiskFileStore(context, File(dir, "downloads").apply { mkdirs() }, File(dir, "generated").apply { mkdirs() })
+    val files = FullDiskFileStore(context, File(dir, "downloads").apply { mkdirs() }, File(dir, "generated").apply { mkdirs() }, io)
     val tracker = TransferProgressTracker(clock)
     val wakeups = CopyOnWriteArrayList<WakeupPlan?>()
     val guard = NetworkGuard(net)

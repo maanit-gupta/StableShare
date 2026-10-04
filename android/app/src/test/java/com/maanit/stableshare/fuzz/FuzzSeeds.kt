@@ -1,5 +1,27 @@
 package com.maanit.stableshare.fuzz
 
+import com.maanit.stableshare.domain.TransferState
+import com.maanit.stableshare.domain.TransferState.CANCELLED
+import com.maanit.stableshare.domain.TransferState.COMPLETED
+import com.maanit.stableshare.domain.TransferState.FAILED
+import com.maanit.stableshare.domain.TransferState.PAUSED
+import com.maanit.stableshare.domain.TransferState.QUEUED
+import com.maanit.stableshare.domain.TransferState.RETRYING
+import com.maanit.stableshare.domain.TransferState.TRANSFERRING
+import com.maanit.stableshare.domain.TransferState.VERIFYING
+
+/** CLAUDE.md "State machine", copied by hand so the fuzz tests do not trust StateMachine. */
+val LEGAL_TRANSITIONS: Map<TransferState, Set<TransferState>> = mapOf(
+    QUEUED to setOf(TRANSFERRING, PAUSED, CANCELLED),
+    TRANSFERRING to setOf(VERIFYING, RETRYING, PAUSED, FAILED, CANCELLED, QUEUED),
+    RETRYING to setOf(TRANSFERRING, QUEUED, PAUSED, FAILED, CANCELLED),
+    VERIFYING to setOf(COMPLETED, RETRYING, FAILED, CANCELLED, QUEUED),
+    PAUSED to setOf(QUEUED, CANCELLED),
+    FAILED to setOf(QUEUED, CANCELLED),
+    COMPLETED to emptySet(),
+    CANCELLED to emptySet(),
+)
+
 /**
  * Seeds for the fuzz tests. `-Pfuzz.seeds=N` runs seeds 1..N (default 200), `-Pfuzz.seed=S`
  * replays only S. Seeds listed in `fuzz-regressions.txt` (`<layer> <seed>` per line) always run.

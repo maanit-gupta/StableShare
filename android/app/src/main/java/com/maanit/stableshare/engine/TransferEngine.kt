@@ -249,7 +249,7 @@ class TransferEngine(
                 if (StateMachine.isActive(state) &&
                     repo.transition(id, TransferState.QUEUED, expectedFrom = state)
                 ) {
-                    repo.logEvent(id, EventType.INFO, "Interrupted by a system stop ($reason); requeued")
+                    repo.logEventWhile(id, setOf(TransferState.QUEUED), EventType.INFO, "Interrupted by a system stop ($reason); requeued")
                 }
             }.onFailure { Log.w(TAG, "requeue of $id after stop failed", it) }
         }

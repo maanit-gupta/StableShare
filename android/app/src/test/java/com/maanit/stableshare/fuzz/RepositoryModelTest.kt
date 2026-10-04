@@ -151,7 +151,7 @@ class RepositoryModelTest {
             }
             val before = repo.getTransfer(t.id)
             val ok = repo.transition(t.id, to, code, "m", retryAt, expectedFrom)
-            val legal = (expectedFrom == null || expectedFrom == t.state) && to in LEGAL.getValue(t.state)
+            val legal = (expectedFrom == null || expectedFrom == t.state) && to in LEGAL_TRANSITIONS.getValue(t.state)
             assertEquals("I1: transition ${t.state} → $to (expectedFrom $expectedFrom) result", legal, ok)
             if (ok) {
                 val manualRetry = t.state == FAILED && to == QUEUED
@@ -304,7 +304,7 @@ class RepositoryModelTest {
                 assertEquals("$id first event is the creation", null, changes.first().fromState)
                 changes.zipWithNext().forEach { (a, b) ->
                     assertEquals("$id: changes chain", a.toState, b.fromState)
-                    assertTrue("I1: $id ${b.fromState} → ${b.toState} is legal", b.toState in LEGAL.getValue(b.fromState!!))
+                    assertTrue("I1: $id ${b.fromState} → ${b.toState} is legal", b.toState in LEGAL_TRANSITIONS.getValue(b.fromState!!))
                 }
                 assertEquals("$id last change = current state", model.getValue(id).state, changes.last().toState)
             }
@@ -314,16 +314,5 @@ class RepositoryModelTest {
     private companion object {
         const val OPS = 100
 
-        /** CLAUDE.md "State machine", copied by hand. */
-        val LEGAL: Map<TransferState, Set<TransferState>> = mapOf(
-            QUEUED to setOf(TRANSFERRING, PAUSED, CANCELLED),
-            TRANSFERRING to setOf(VERIFYING, RETRYING, PAUSED, FAILED, CANCELLED, QUEUED),
-            RETRYING to setOf(TRANSFERRING, QUEUED, PAUSED, FAILED, CANCELLED),
-            VERIFYING to setOf(COMPLETED, RETRYING, FAILED, CANCELLED, QUEUED),
-            PAUSED to setOf(QUEUED, CANCELLED),
-            FAILED to setOf(QUEUED, CANCELLED),
-            COMPLETED to emptySet(),
-            CANCELLED to emptySet(),
-        )
     }
 }

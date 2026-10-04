@@ -10,6 +10,7 @@ import com.maanit.stableshare.data.net.TransferApi
 import com.maanit.stableshare.domain.ChunkStatus
 import com.maanit.stableshare.domain.ErrorCode
 import com.maanit.stableshare.domain.EventType
+import com.maanit.stableshare.domain.StateMachine
 import com.maanit.stableshare.domain.TransferState
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -98,7 +99,7 @@ class DownloadPipeline(
             }
             if (repo.getChunks(id).any { it.status == ChunkStatus.DONE } || part.exists()) {
                 repo.resetChunks(id)
-                repo.logEvent(id, EventType.INFO, "Part file missing or wrong size; restarting from chunk 0")
+                repo.logEventWhile(id, StateMachine.ACTIVE, EventType.INFO, "Part file missing or wrong size; restarting from chunk 0")
             }
             val created = runner.run(Step.Named("create part file")) { files.createPartFile(id, t.fileName, t.fileSize) }
             if (created.absolutePath != part.absolutePath) {
@@ -115,7 +116,7 @@ class DownloadPipeline(
             val bad = tail.filterNot { files.verifyChunkOnDisk(part, it.offset, it.length, requireNotNull(it.sha256)) }
             if (bad.isNotEmpty()) {
                 repo.resetChunks(id, bad.map { it.index })
-                repo.logEvent(id, EventType.INFO, "On-disk check failed for chunk(s) ${bad.map { it.index }}; fetching them again")
+                repo.logEventWhile(id, StateMachine.ACTIVE, EventType.INFO, "On-disk check failed for chunk(s) ${bad.map { it.index }}; fetching them again")
             }
         }
 
@@ -173,7 +174,7 @@ class DownloadPipeline(
         }
 
         private suspend fun complete(sha: String, message: String) {
-            repo.logEvent(id, EventType.VERIFIED, message)
+            repo.logEventWhile(id, StateMachine.ACTIVE, EventType.VERIFIED, message)
             if (!repo.transition(id, TransferState.COMPLETED, expectedFrom = TransferState.VERIFYING)) {
                 throw PipelineSignal.Stop("lost CAS VERIFYING → COMPLETED ($sha)")
             }

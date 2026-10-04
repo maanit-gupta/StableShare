@@ -39,7 +39,7 @@ class FakeTransferServer : TransferApi {
         /** Processes and persists, then fails: the lost-response case. */
         data class After(val error: Throwable) : Fault
 
-        /** Download: one byte flipped in the body. */
+        /** One byte flipped in the body: a download's response, or an upload chunk's request. */
         data object Corrupt : Fault
     }
 
@@ -102,15 +102,17 @@ class FakeTransferServer : TransferApi {
         val f = fault(call)
         if (f is Fault.Before) { onProgress(bytes.size / 2L); throw f.error }
         onProgress(bytes.size.toLong())
+        // Corrupt: a byte flipped in transit, which the server's per-chunk hash check must catch.
+        val body = if (f is Fault.Corrupt && bytes.isNotEmpty()) bytes.copyOf().also { it[it.size / 2] = (it[it.size / 2] + 1).toByte() } else bytes
         val session = sessions[uploadId] ?: throw http(404, "SESSION_NOT_FOUND")
         if (session.completedSha != null) throw http(409, "SESSION_COMPLETED")
         val expected = ChunkPlanner.plan(session.request.fileSize, session.request.chunkSize)[index].length
-        if (bytes.size != expected) throw http(400, "CHUNK_LENGTH_MISMATCH")
-        val actual = FileStore.sha256Hex(bytes)
+        if (body.size != expected) throw http(400, "CHUNK_LENGTH_MISMATCH")
+        val actual = FileStore.sha256Hex(body)
         if (actual != sha256) throw http(422, "CHUNK_HASH_MISMATCH")
         val existing = session.chunks[index]
         val status = when {
-            existing == null -> { session.chunks[index] = bytes.copyOf(); ChunkUploadResponse.STATUS_STORED }
+            existing == null -> { session.chunks[index] = body.copyOf(); ChunkUploadResponse.STATUS_STORED }
             FileStore.sha256Hex(existing) == actual -> ChunkUploadResponse.STATUS_ALREADY_RECEIVED
             else -> throw http(409, "CHUNK_CONFLICT")
         }

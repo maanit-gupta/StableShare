@@ -364,6 +364,24 @@ class TransferRepository(
         insertEvent(id, type, message, chunkIndex = chunkIndex)
     }
 
+    /**
+     * Logs only while the transfer is in one of [states], checked in the same transaction, so a
+     * job whose row was paused or cancelled meanwhile cannot add to its history. Returns whether
+     * the event was written.
+     */
+    suspend fun logEventWhile(
+        id: String,
+        states: Set<TransferState>,
+        type: EventType,
+        message: String,
+        chunkIndex: Int? = null,
+    ): Boolean = db.withTransaction {
+        val state = transfers.get(id)?.state ?: return@withTransaction false
+        if (state !in states) return@withTransaction false
+        insertEvent(id, type, message, chunkIndex = chunkIndex)
+        true
+    }
+
     private suspend fun insertEvent(
         id: String,
         type: EventType,

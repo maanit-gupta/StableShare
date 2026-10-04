@@ -1,2 +1,3 @@
 # Fuzz seeds that once failed; they always run. One per line: <layer> <seed>
 # Layers: repository (RepositoryModelTest), engine (EngineFuzzTest).
+engine 1346 # RETRY_SCHEDULED logged after a concurrent cancel (fixed: logEventWhile)
