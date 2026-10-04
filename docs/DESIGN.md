@@ -739,4 +739,20 @@ Where it is "Tested" by:
 | 31 | Wi-Fi only on, Wi-Fi lost to mobile data mid-chunk | The in-flight request is cancelled 1500 ms after `usableNetwork` turns false (or fails first because its socket died) → `RETRYING METERED_NETWORK`, no attempt consumed, DONE chunks kept; nothing is claimed or sent until an unmetered network returns, then the rows are promoted and resume (WifiOnlyTest). A blip shorter than 1500 ms interrupts nothing. |
 | 32 | Wi-Fi only switched on while transferring over mobile data | Same path as #31 (`usableNetwork` turns false). Switching it off on mobile data makes the network usable: waiting rows resume. |
 
+## 12. Deployment
+
+The server also runs publicly at `https://stableshare.onrender.com` (Render free web service, Singapore, Docker image from `server/Dockerfile`, settings in `render.yaml`), and the app's default Server URL is that address (`DEFAULT_SERVER_URL` in `SettingsRepository.kt`). The Settings override and the local server (`10.0.2.2` or a LAN IP over cleartext HTTP, §2) still work. The protocol, state machine and retry classification are unchanged; the hosted behaviour comes only from env vars that are off by default (`server/src/config.js`):
+
+| Env var | Hosted value | Effect |
+|---|---|---|
+| `STORAGE_DIR` | `/data` | Ephemeral container storage: wiped on every deploy, restart and idle spin-down. |
+| `SEED_ON_START` / `SEED_MAX_BYTES` | `1` / 200 MiB | Boot rewrites any seed file whose size or sha256 does not match, skipping seeds above the limit (sample-500MB, sample-1GB). |
+| `MAX_UPLOAD_BYTES` | 512 MiB | Larger uploads get 413 `FILE_TOO_LARGE` at session create (§3.1), which the app classifies as permanent (§7). |
+| `SESSION_TTL_MS` | 48 h | Incomplete sessions idle longer than this are swept hourly. |
+| `COMPLETED_UPLOAD_TTL_MS` | 24 h | The sweep also removes older completed uploads and their hash-index entries. Seed files are never removed. |
+| `FAULT_AUTO_RESET_MS` | 30 min | Faults (always off at boot) are reset after this long without an admin call. |
+| `DISABLE_FILE_MUTATE` | `1` | `POST /admin/files/:id/mutate` is not registered (§3.3). |
+
+The OkHttp read timeout is 60 s (connect 10 s, write 30 s) to absorb cold starts and slow uplinks.
+
 The UI that sits on this engine is specified in [UI-SPEC.md](UI-SPEC.md) and summarised in the [README](../README.md#11-ui-and-design).

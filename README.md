@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk">
+  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk">
     <img src="docs/design/mascot/previews/launcher_icon.png" width="128" alt="StableShare app icon. Tap to download the APK">
   </a>
 </p>
@@ -7,24 +7,24 @@
 <h1 align="center">StableShare</h1>
 
 <p align="center">
-  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk">
-    <img src="https://img.shields.io/badge/Download_APK-v1.1.0-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Download StableShare APK v1.1.0">
+  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk">
+    <img src="https://img.shields.io/badge/Download_APK-v1.2.0-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Download StableShare APK v1.2.0">
   </a>
   <br>
-  <sub>Android 8.0+ · 3.8 MB · signed release · <a href="https://github.com/maanit-gupta/StableShare/releases/tag/v1.1.0">release notes</a></sub>
+  <sub>Android 8.0+ · 3.8 MB · signed release · <a href="https://github.com/maanit-gupta/StableShare/releases/tag/v1.2.0">release notes</a></sub>
   <br><br>
   <a href="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml"><img src="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads and downloads files of up to 1 GB to a local Node.js mock server and survives pause and resume, lost or flapping networks, timeouts, lost responses, server errors, app kills and restarts. Files move in SHA-256-checked pieces. Every state change is a validated compare-and-set in Room, and every retry is bounded. A transfer shows **Completed** only after the whole file has been verified end to end. The server injects faults on demand from the app's own network simulator, so you can watch all of this happen.
+StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads and downloads files of up to 1 GB (512 MiB on the hosted server) to a Node.js mock server, hosted at https://stableshare.onrender.com by default or run locally, and survives pause and resume, lost or flapping networks, timeouts, lost responses, server errors, app kills and restarts. Files move in SHA-256-checked pieces. Every state change is a validated compare-and-set in Room, and every retry is bounded. A transfer shows **Completed** only after the whole file has been verified end to end. The server injects faults on demand from the app's own network simulator, so you can watch all of this happen.
 
 | Transfers | Detail | History | Settings |
 |---|---|---|---|
 | ![Transfers](docs/screenshots/05-transfers-active.png) | ![Detail](docs/screenshots/07-detail-transferring.png) | ![History](docs/screenshots/11-history.png) | ![Settings](docs/screenshots/12-settings.png) |
 
-**Download:** tap the icon or the button above, or this link: [StableShare-1.1.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.1.0/StableShare-1.1.0.apk) from the [v1.1.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.1.0) (3 807 237 bytes, v2-signed; also in [release/](release/StableShare-1.1.0.apk)), SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0` ([CHECKSUMS.txt](release/CHECKSUMS.txt)).
+**Download:** tap the icon or the button above, or this link: [StableShare-1.2.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk) from the [v1.2.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.2.0) (3 807 321 bytes, v2-signed; also in [release/](release/StableShare-1.2.0.apk)), SHA-256 `6569424a726472a76cc954300992a4f6f0382b2a0ab2bb95596a4845af95b0af` ([CHECKSUMS.txt](release/CHECKSUMS.txt)). The previous [1.1.0 APK](release/StableShare-1.1.0.apk) is kept; it defaults to the local server.
 
-**Install on a phone:** open the link on the Android device, then open the downloaded file. Android asks you to allow installs from your browser or file manager the first time. Then set the server address in Settings (see [Quick start](#quick-start)).
+**Install on a phone:** open the link on the Android device, then open the downloaded file. Android asks you to allow installs from your browser or file manager the first time. The app connects to the hosted server by default; nothing needs to be set (see [Quick start](#quick-start)).
 
 The full design is in [docs/DESIGN.md](docs/DESIGN.md) and the UI spec is in [docs/UI-SPEC.md](docs/UI-SPEC.md).
 
@@ -72,6 +72,12 @@ The GIF plays at 2× speed. The full 5:39 recording at normal speed is [docs/dem
 
 ## Quick start
 
+### 1. Hosted server (default)
+
+Install the APK; it connects to the hosted server at https://stableshare.onrender.com by default ([SettingsRepository.kt](android/app/src/main/java/com/maanit/stableshare/data/settings/SettingsRepository.kt)). Open Settings → Server address → **Test connection** to check it. The free instance spins down when idle, so the first request after a quiet spell is slow while it wakes. See [Hosted server](#hosted-server).
+
+### 2. Local server (fallback)
+
 **Server** (Node.js 20 or newer):
 ```sh
 cd server
@@ -80,14 +86,26 @@ npm run seed   # sample-0B, sample-odd (3 MiB + 123 B), sample-50MB, sample-200M
 npm run dev    # http://0.0.0.0:8080; settings are env vars, see server/.env.example
 ```
 
-**App:** the signed APK is [release/StableShare-1.1.0.apk](release/StableShare-1.1.0.apk); install it with `adb install -r release/StableShare-1.1.0.apk`. To build from source (JDK 25 toolchain, Android SDK), run `./gradlew assembleDebug` in `android/`. `./gradlew assembleRelease` signs only when `android/keystore.properties` exists; that file and the keystore are not in the repository.
+**App:** the signed APK is [release/StableShare-1.2.0.apk](release/StableShare-1.2.0.apk); install it with `adb install -r release/StableShare-1.2.0.apk`. To build from source (JDK 25 toolchain, Android SDK), run `./gradlew assembleDebug` in `android/`. `./gradlew assembleRelease` signs only when `android/keystore.properties` exists; that file and the keystore are not in the repository.
 
 **Server address** (Settings → Server address, then **Test connection**):
-- **Emulator:** the default `http://10.0.2.2:8080` reaches the host machine.
+- **Emulator:** `http://10.0.2.2:8080` reaches the host machine.
 - **Phone:** your computer's LAN IP, for example `http://192.168.1.2:8080`, with both devices on the same Wi-Fi. Cleartext HTTP is allowed by [network_security_config.xml](android/app/src/main/res/xml/network_security_config.xml).
 - **Android 17+** needs the local-network permission, which onboarding asks for. Without it, traffic to private addresses times out silently.
 
 **Network simulator:** Settings → Network simulator. Pick a preset (Slow network, Flaky Wi-Fi, Lost responses, Corruption, Chaos) or set each fault, then tap **Apply**. **Reset** turns everything off. Faults apply to every client of that server.
+
+## Hosted server
+
+The same server code runs on a Render free web service in Singapore at https://stableshare.onrender.com, built from [server/Dockerfile](server/Dockerfile) and configured by [render.yaml](render.yaml). The hosted behaviour comes only from env vars, all off by default ([config.js](server/src/config.js), [.env.example](server/.env.example)), so the local server and the test suite are unchanged.
+
+- **No persistent disk.** Storage (`STORAGE_DIR=/data`) is wiped on every deploy, restart and idle spin-down. Uploaded files and upload sessions do not survive it.
+- **Seed on start.** With `SEED_ON_START=1`, boot rewrites any seed file whose size or SHA-256 does not match ([seedData.js](server/src/seedData.js), [server.js](server/src/server.js)). `SEED_MAX_BYTES` (200 MiB) skips larger seeds, so the hosted list is sample-0B, sample-odd, sample-50MB and sample-200MB.
+- **Size cap.** `MAX_UPLOAD_BYTES` is 512 MiB (local default 1 GiB). A larger upload is refused at session init with 413 `FILE_TOO_LARGE` ([uploads.js](server/src/routes/uploads.js), tested in [uploads.test.js](server/test/uploads.test.js)), which the app treats as permanent ([ErrorClassifier.kt](android/app/src/main/java/com/maanit/stableshare/data/net/ErrorClassifier.kt)).
+- **Cleanup.** The hourly sweep removes incomplete sessions idle for more than 48 h (`SESSION_TTL_MS`; local 24 h) and, with `COMPLETED_UPLOAD_TTL_MS`, completed uploads older than 24 h together with their instant-upload index entries. Seed files are never touched.
+- **Network simulator.** Open to everyone, as locally, and off at every boot. With `FAULT_AUTO_RESET_MS`, faults left on are switched off after 30 minutes without an admin call ([server.js](server/src/server.js)). `DISABLE_FILE_MUTATE=1` removes `POST /admin/files/:id/mutate`, so nobody can rewrite the seed files ([admin.js](server/src/routes/admin.js)).
+- **Cold starts.** The free instance spins down when idle and wakes on the next request, so that request is slow. The app's read timeout is 60 s ([ProtocolClient]).
+- **Fallback.** If the hosted server is unavailable, run the [local server](#2-local-server-fallback) and set its address in Settings, or watch the [demo](#demo).
 
 ## Architecture
 
@@ -313,14 +331,14 @@ cd android && ./gradlew connectedDebugAndroidTest   # instrumented: launch + rea
 
 ## Known limitations and future work
 
-- **Cleartext HTTP and no authentication.** That's fine for a local mock server. A real deployment needs TLS and auth.
+- **No authentication, and cleartext only for the local server.** The hosted server uses HTTPS; cleartext HTTP is allowed in [network_security_config.xml](android/app/src/main/res/xml/network_security_config.xml) only so the app can reach a local server by IP. Anyone can use the hosted server and its network simulator. A real service needs auth.
 - **Instant upload trusts the hash alone.** Anyone who knows a file's SHA-256 and size can claim it. A real service would need proof of possession.
 - **Single-process mock server.** Per-session locks ([locks.js](server/src/locks.js)) are in memory, so it can't be scaled out as is.
 - **Force stop** can't be survived (see above). Transfers pause and wait for the user.
 - **The UIDT job needs a validated network.** JobScheduler turns `NETWORK_TYPE_ANY` into INTERNET + VALIDATED (seen in `dumpsys` on API 37). On older Android versions, and for background starts, WorkManager is the host.
 - **Real-device test (OnePlus CPH2717, Android 16):** uploads, kill and resume, instant upload and pause/resume passed. Only a 0-byte download was run on the phone. The 200 MB download was verified on emulators only.
 - **Offline race:** in one demo rehearsal, a row showed "Waiting, #1 in line" instead of "Waiting for network", probably because WorkManager stopped on its network constraint before the 1.5 s guard fired. It still resumed on its own.
-- **Slow uploads hit the read timeout:** at 512 kbps, a 2 MiB piece needs about 33 s, more than OkHttp's 30 s read timeout ([ProtocolClient]), so pieces retry. They still verify.
+- **Slow uploads can hit the read timeout:** at 512 kbps, a 2 MiB piece needs about 33 s. Version 1.2.0 raised OkHttp's read timeout from 30 s to 60 s ([ProtocolClient]); a slower link still retries pieces, which still verify.
 - **Retrying `REMOTE_FILE_CHANGED`** reuses the old ETag and fails again, so the user must cancel and download again.
 - **Rare crash windows:** a crash between the final rename and recording the path re-downloads the file. A cancel cut short by process death leaves a server session (expires in 24 h) or a local file.
 - **Untested and minor:** the server's disk-full path (507) has no automated test. Generated test files are never deleted. After `kill -9`, resuming took about 18 s on API 37 and up to 80 s on API 33.
@@ -332,7 +350,7 @@ StableShare/
 ├── README.md, CHANGELOG.md, .gitignore
 ├── .github/workflows/      ci.yml (tests on push/PR), chaos.yml (manual)
 ├── docs/                   DESIGN.md, UI-SPEC.md, benchmarks.md, DEMO-SCRIPT.md, demo/, screenshots/, design/mascot/
-├── release/                StableShare-1.1.0.apk, CHECKSUMS.txt
+├── release/                StableShare-1.1.0.apk, StableShare-1.2.0.apk, CHECKSUMS.txt
 ├── scripts/                demo recording helpers
 ├── server/
 │   ├── src/                app.js, server.js, routes/ (uploads, files, admin), faults.js, storage.js, locks.js
