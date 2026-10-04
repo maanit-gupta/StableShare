@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.maanit.stableshare.engine.TransferScheduler
+import com.maanit.stableshare.engine.ensureRunning
 
 /** Fires when a persisted backoff is due or the network returns; it only (re)starts the coordinator. */
 class CoordinatorWakeupWorker(

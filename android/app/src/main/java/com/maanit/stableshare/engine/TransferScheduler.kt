@@ -3,10 +3,17 @@ package com.maanit.stableshare.engine
 import com.maanit.stableshare.data.db.TransferEntity
 import com.maanit.stableshare.domain.TransferState
 
-/** Starts the coordinator if it is not already going to pick up new work by itself. */
+/**
+ * Starts the coordinator if it is not already going to pick up new work by itself.
+ * [userInitiated] is true only for a user action (start an upload or download, Resume, Retry);
+ * on Android 14+ such a call may host the run in a user-initiated data transfer job.
+ */
 fun interface TransferScheduler {
-    fun ensureRunning()
+    fun ensureRunning(userInitiated: Boolean)
 }
+
+/** A start not caused by a user action: app start, connectivity, settings, wake-ups, stops. */
+fun TransferScheduler.ensureRunning() = ensureRunning(userInitiated = false)
 
 /**
  * When the exiting coordinator should be started again: after [delayMs] (the earliest persisted

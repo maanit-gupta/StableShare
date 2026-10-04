@@ -19,7 +19,8 @@ import java.util.UUID
 
 /**
  * Every user intent goes through here (the UI never writes state). Each change is a repository
- * transition; anything that creates runnable work calls [TransferScheduler.ensureRunning].
+ * transition; anything that creates runnable work calls [TransferScheduler.ensureRunning], as a
+ * user-initiated start (Android 14+ may then host the run in a user-initiated job).
  */
 class TransferController(
     private val repo: TransferRepository,
@@ -47,7 +48,7 @@ class TransferController(
             sourceUri = uri.toString(),
             chunkSize = settings().uploadChunkSizeBytes,
         )
-        scheduler.ensureRunning()
+        scheduler.ensureRunning(userInitiated = true)
         return transfer
     }
 
@@ -57,7 +58,7 @@ class TransferController(
         val id = UUID.randomUUID().toString()
         val part = files.partFileFor(id, manifest.name)
         val transfer = repo.createDownload(manifest, Uri.fromFile(part).toString(), id = id)
-        scheduler.ensureRunning()
+        scheduler.ensureRunning(userInitiated = true)
         return transfer
     }
 
@@ -72,12 +73,19 @@ class TransferController(
     /** The coordinator sees the row leave TRANSFERRING/RETRYING and cancels the job; progress is kept. */
     suspend fun pause(id: String): Boolean = repo.transition(id, TransferState.PAUSED)
 
+    /**
+     * The notification's "Pause transfers": pauses every QUEUED, TRANSFERRING and RETRYING row
+     * (VERIFYING has no edge to PAUSED and finishes on its own). Returns how many were paused.
+     */
+    suspend fun pauseAll(): Int =
+        repo.getInStates(TransferState.QUEUED, TransferState.TRANSFERRING, TransferState.RETRYING).count { pause(it.id) }
+
     suspend fun resume(id: String): Boolean =
-        repo.transition(id, TransferState.QUEUED, expectedFrom = TransferState.PAUSED).also { if (it) scheduler.ensureRunning() }
+        repo.transition(id, TransferState.QUEUED, expectedFrom = TransferState.PAUSED).also { if (it) scheduler.ensureRunning(userInitiated = true) }
 
     /** Manual retry: FAILED → QUEUED; the repository resets attempt counters and keeps DONE chunks. */
     suspend fun retry(id: String): Boolean =
-        repo.transition(id, TransferState.QUEUED, expectedFrom = TransferState.FAILED).also { if (it) scheduler.ensureRunning() }
+        repo.transition(id, TransferState.QUEUED, expectedFrom = TransferState.FAILED).also { if (it) scheduler.ensureRunning(userInitiated = true) }
 
     /**
      * CANCELLED wins the CAS first, so nothing can revive the row. Then the job (if any) is

@@ -1,6 +1,10 @@
 package com.maanit.stableshare.di
 
 import android.content.Context
+import android.os.Build
+import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.work.WorkManager
@@ -15,6 +19,7 @@ import com.maanit.stableshare.engine.AndroidConnectivityMonitor
 import com.maanit.stableshare.engine.DownloadPipeline
 import com.maanit.stableshare.engine.EngineBootstrap
 import com.maanit.stableshare.engine.GuardedTransferApi
+import com.maanit.stableshare.engine.HostSelectingScheduler
 import com.maanit.stableshare.engine.NetworkGuard
 import com.maanit.stableshare.engine.PipelineEnv
 import com.maanit.stableshare.engine.RestoredTransfers
@@ -22,11 +27,13 @@ import com.maanit.stableshare.engine.RunLease
 import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferEngine
 import com.maanit.stableshare.engine.TransferProgressTracker
+import com.maanit.stableshare.engine.TransferScheduler
 import com.maanit.stableshare.engine.UploadPipeline
 import com.maanit.stableshare.ui.LocalNetworkPermission
 import com.maanit.stableshare.worker.AppWorkerFactory
 import com.maanit.stableshare.worker.TransferNotifications
 import com.maanit.stableshare.worker.TransferResultNotifier
+import com.maanit.stableshare.worker.UidtJobScheduler
 import com.maanit.stableshare.worker.WorkManagerScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -102,10 +109,26 @@ class AppContainer(context: Context) {
         )
     }
 
-    val scheduler: WorkManagerScheduler by lazy {
+    /** The coordinator's WorkManager host and every wake-up. */
+    private val workManagerScheduler: WorkManagerScheduler by lazy {
         WorkManagerScheduler(
             workManager = { WorkManager.getInstance(appContext) },
             engineAcceptingWork = { transferEngine.isAcceptingWork() },
+        )
+    }
+
+    /** Starts the coordinator: a user-initiated job for user actions on Android 14+, else WorkManager. */
+    val scheduler: TransferScheduler by lazy {
+        HostSelectingScheduler(
+            sdkInt = Build.VERSION.SDK_INT,
+            appVisible = { ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) },
+            leaseHeld = runLease::isHeld,
+            engineAcceptingWork = { transferEngine.isAcceptingWork() },
+            uidt = {
+                if (Build.VERSION.SDK_INT >= HostSelectingScheduler.UIDT_MIN_SDK) UidtJobScheduler(appContext).schedule() else "below Android 14"
+            },
+            fallback = workManagerScheduler,
+            log = { Log.w("StableShare", it) },
         )
     }
 
@@ -120,7 +143,7 @@ class AppContainer(context: Context) {
             upload = UploadPipeline(pipelineApi, fileStore, pipelineEnv),
             download = DownloadPipeline(pipelineApi, fileStore, pipelineEnv),
             tracker = progressTracker,
-            wakeups = scheduler,
+            wakeups = workManagerScheduler,
             restored = restoredTransfers,
             lease = runLease,
         )

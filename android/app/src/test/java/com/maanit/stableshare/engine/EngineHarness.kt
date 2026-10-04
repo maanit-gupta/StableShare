@@ -132,6 +132,9 @@ class EngineHarness(
     /** What the pipelines talk to: the fake server behind the network guard. */
     val pipelineApi = GuardedTransferApi(server, guard)
     val ensureRunningCalls = CopyOnWriteArrayList<Long>()
+
+    /** The subset of [ensureRunningCalls] made as user-initiated starts. */
+    val userInitiatedCalls = CopyOnWriteArrayList<Long>()
     val lease = RunLease()
 
     /** Called on the loop's thread whenever the engine schedules a wake-up (it is exiting then). */
@@ -157,7 +160,10 @@ class EngineHarness(
         clock = clock,
         lease = lease,
     )
-    val scheduler = TransferScheduler { ensureRunningCalls += clock() }
+    val scheduler = TransferScheduler { userInitiated ->
+        ensureRunningCalls += clock()
+        if (userInitiated) userInitiatedCalls += clock()
+    }
     val controller = TransferController(repo, server, files, { this.settings.value }, scheduler, engine)
 
     init {

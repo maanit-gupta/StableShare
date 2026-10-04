@@ -53,6 +53,10 @@ class TransferNotificationsTest {
         val intent = shadowOf(n.contentIntent).savedIntent
         assertTrue(intent.getBooleanExtra(AppIntents.EXTRA_OPEN_TRANSFERS, false))
 
+        val pause = n.actions.single()
+        assertEquals("Pause transfers", pause.title)
+        assertEquals(PauseTransfersReceiver.ACTION, shadowOf(pause.actionIntent).savedIntent.action)
+
         val one = notifications.build(CoordinatorStatus(1, 0, 10 * mb))
         assertEquals("Moving 1 file", one.title)
         assertEquals("0% overall", one.text)

@@ -25,7 +25,7 @@ class WorkManagerScheduler(
     private val engineAcceptingWork: () -> Boolean,
 ) : TransferScheduler, WakeupScheduler {
 
-    override fun ensureRunning() {
+    override fun ensureRunning(userInitiated: Boolean) {
         if (engineAcceptingWork()) return
         val request = OneTimeWorkRequestBuilder<TransferCoordinatorWorker>()
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)

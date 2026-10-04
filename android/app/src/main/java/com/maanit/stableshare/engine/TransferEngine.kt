@@ -34,6 +34,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** What a stopped host's running transfers become (see TransferEngine.handleStop). */
+enum class StopKind { REQUEUE, PAUSE, WAIT_FOR_NETWORK }
+
 /**
  * Aggregate numbers for the foreground notification: running pipelines, their combined progress,
  * transfers queued or running ([pending]) and their combined live speed.
@@ -106,19 +109,23 @@ class TransferEngine(
     /**
      * One coordinator run for a host. Returns when nothing is running or QUEUED (after scheduling a
      * wake-up for rows that wait on a backoff or the network). If cancelled — the system stopped
-     * the host — the running transfers go back to QUEUED (an interruption, not a failure).
+     * the host — the running transfers are handled as [stopKind] says (default: back to QUEUED, an
+     * interruption, not a failure). Both lambdas are read only once the stop has happened.
      *
      * Returns false at once, without running, when another host holds the [lease]; that host runs
      * the loop again before it lets go, so new rows are still picked up.
      */
-    suspend fun run(stopReason: () -> String = { "cancelled" }): Boolean = lease.runOrHandOff { runLoop(stopReason) }
+    suspend fun run(
+        stopReason: () -> String = { "cancelled" },
+        stopKind: () -> StopKind = { StopKind.REQUEUE },
+    ): Boolean = lease.runOrHandOff { runLoop(stopReason, stopKind) }
 
-    private suspend fun runLoop(stopReason: () -> String) {
+    private suspend fun runLoop(stopReason: () -> String, stopKind: () -> StopKind) {
         accepting.set(true)
         try {
             coroutineScope { coordinate() }
         } catch (e: CancellationException) {
-            withContext(NonCancellable) { requeueAfterStop(stopReason()) }
+            withContext(NonCancellable) { handleStop(stopReason(), stopKind()) }
             throw e
         } finally {
             accepting.set(false)
@@ -239,11 +246,18 @@ class TransferEngine(
     }
 
     /**
-     * System stop (DESIGN.md §9): every transfer this run was working on goes back to QUEUED,
-     * with no error code and no attempt consumed, and a wake-up is scheduled as a backstop. Rows
-     * the user paused or cancelled meanwhile are untouched (expectedFrom).
+     * System stop (DESIGN.md §9). Every transfer this run was working on is handled per [kind],
+     * with no attempt consumed; rows the user paused or cancelled meanwhile are untouched
+     * (expectedFrom), and terminal rows are never written.
+     * - REQUEUE: back to QUEUED with no error code; a wake-up is scheduled as a backstop.
+     * - PAUSE (the user stopped the job): TRANSFERRING/RETRYING → PAUSED; VERIFYING has no edge to
+     *   PAUSED, so it goes back to QUEUED. No wake-up: nothing restarts until the user acts or the
+     *   app starts again.
+     * - WAIT_FOR_NETWORK (the job lost its network constraint): TRANSFERRING/VERIFYING → RETRYING
+     *   NETWORK_UNAVAILABLE without nextRetryAt, the usual waiting path; RETRYING rows already wait
+     *   (on a backoff or the network) and are left as they are. A network wake-up is scheduled.
      */
-    private suspend fun requeueAfterStop(reason: String) {
+    private suspend fun handleStop(reason: String, kind: StopKind) {
         // Jobs that ended on their own already removed themselves; what is left was interrupted.
         val owned = jobs.keys.toList()
         jobs.values.forEach { it.cancel() }
@@ -252,18 +266,28 @@ class TransferEngine(
         for (id in owned) {
             runCatching {
                 val state = repo.getTransfer(id)?.state ?: return@runCatching
-                if (StateMachine.isActive(state) &&
-                    repo.transition(id, TransferState.QUEUED, expectedFrom = state)
-                ) {
-                    repo.logEventWhile(id, setOf(TransferState.QUEUED), EventType.INFO, "Interrupted by a system stop ($reason); requeued")
+                if (!StateMachine.isActive(state)) return@runCatching
+                when {
+                    kind == StopKind.PAUSE && state != TransferState.VERIFYING ->
+                        repo.transition(id, TransferState.PAUSED, expectedFrom = state)
+                    kind == StopKind.WAIT_FOR_NETWORK -> if (state != TransferState.RETRYING) {
+                        repo.transition(
+                            id, TransferState.RETRYING, ErrorCode.NETWORK_UNAVAILABLE,
+                            "The system stopped the transfer job: no network ($reason)", nextRetryAt = null, expectedFrom = state,
+                        )
+                    }
+                    repo.transition(id, TransferState.QUEUED, expectedFrom = state) ->
+                        repo.logEventWhile(id, setOf(TransferState.QUEUED), EventType.INFO, "Interrupted by a system stop ($reason); requeued")
                 }
-            }.onFailure { Log.w(TAG, "requeue of $id after stop failed", it) }
+            }.onFailure { Log.w(TAG, "handling $id after stop failed", it) }
         }
-        runCatching {
-            val unmetered = settings.first().wifiOnly
-            wakeups.schedule(WakeupPlan(WakeupPlan.AFTER_STOP_MS, requiresNetwork = true, unmetered = unmetered))
+        if (kind != StopKind.PAUSE) {
+            runCatching {
+                val unmetered = settings.first().wifiOnly
+                wakeups.schedule(WakeupPlan(WakeupPlan.AFTER_STOP_MS, requiresNetwork = true, unmetered = unmetered))
+            }
         }
-        Log.i(TAG, "coordinator stopped ($reason); requeued ${owned.size} transfer(s)")
+        Log.i(TAG, "coordinator stopped ($reason, $kind); handled ${owned.size} transfer(s)")
     }
 
     private companion object {

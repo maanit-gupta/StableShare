@@ -42,7 +42,10 @@ class TransferNotifications(private val context: Context) {
         )
     }
 
-    /** "Moving {n} file(s)" / "{percent}% overall, {speed}", with a determinate overall bar. Tap: Transfers. */
+    /**
+     * "Moving {n} file(s)" / "{percent}% overall, {speed}", with a determinate overall bar. Tap:
+     * Transfers. Action "Pause transfers" pauses everything queued or running (both hosts).
+     */
     fun build(status: CoordinatorStatus): Notification {
         val n = maxOf(status.active, status.pending)
         val speed = Format.speed(status.bytesPerSecond)
@@ -63,7 +66,13 @@ class TransferNotifications(private val context: Context) {
             .setSilent(true)
             .setContentIntent(PendingIntent.getActivity(context, REQUEST_ONGOING, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .addAction(0, context.getString(R.string.notif_pause_transfers), pauseIntent())
             .build()
+    }
+
+    private fun pauseIntent(): PendingIntent {
+        val intent = Intent(context, PauseTransfersReceiver::class.java).setAction(PauseTransfersReceiver.ACTION)
+        return PendingIntent.getBroadcast(context, REQUEST_PAUSE, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
     fun foregroundInfo(status: CoordinatorStatus): ForegroundInfo {
@@ -120,7 +129,11 @@ class TransferNotifications(private val context: Context) {
         const val CHANNEL_ID = "transfers"
         const val RESULTS_CHANNEL_ID = "results"
         const val NOTIFICATION_ID = 1001
+
+        /** The UIDT job's copy of the ongoing notification; the system removes it when the job ends. */
+        const val JOB_NOTIFICATION_ID = 1002
         private const val REQUEST_ONGOING = 0
+        private const val REQUEST_PAUSE = 1
 
         /** Stable per-transfer id, never colliding with the ongoing notification. */
         fun resultId(transferId: String): Int = (transferId.hashCode() and 0x7fffffff) or 0x10000

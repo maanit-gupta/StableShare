@@ -261,6 +261,7 @@
     </plurals>
     <string name="notif_overall_speed">%1$d%% overall, %2$s</string>
     <string name="notif_overall">%1$d%% overall</string>
+    <string name="notif_pause_transfers">Pause transfers</string>
     <string name="notif_upload_complete">Upload complete</string>
     <string name="notif_download_complete">Download complete</string>
     <string name="notif_verified">%1$s was verified.</string>

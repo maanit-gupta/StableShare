@@ -106,6 +106,23 @@ class TransferEngineTest {
     }
 
     @Test
+    fun pauseAllPausesQueuedAndRunningTransfersAndTheLoopExits() = runTest {
+        val h = harness() // maxConcurrent = 2, so the third upload stays QUEUED
+        val ids = (1..3).map { h.upload(3 * chunk, seed = it).first.id }
+        val held = h.holdAt(Op.CHUNK, 1)
+        val run = launch { h.engine.run() }
+        held.await()
+        assertEquals(3, h.controller.pauseAll())
+        run.join()
+        ids.forEach { assertEquals(it, PAUSED, h.state(it)) }
+        assertEquals("nothing left to pause", 0, h.controller.pauseAll())
+
+        val userBefore = h.userInitiatedCalls.size
+        assertTrue(h.controller.resume(ids[0]))
+        assertEquals("Resume is a user-initiated start", userBefore + 1, h.userInitiatedCalls.size)
+    }
+
+    @Test
     fun pauseAndResumeDownloadNeverRefetchesEarlierChunks() = runTest {
         val h = harness()
         val (t, bytes) = h.download(6 * chunk)

@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.maanit.stableshare.engine.ensureRunning
 import com.maanit.stableshare.ui.LocalNetworkPermission
 import com.maanit.stableshare.ui.LocalPermissionRequester
 import com.maanit.stableshare.ui.PermissionRequester

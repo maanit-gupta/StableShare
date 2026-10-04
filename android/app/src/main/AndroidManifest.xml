@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Android 13+: needed to show the progress notification; transfers run without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 14+: user-started transfers run in a user-initiated data transfer job. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
 
     <application
         android:name=".StableShareApp"
@@ -53,6 +55,18 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+
+        <!-- Android 14+ host for user-started transfers (TransferJobService, DESIGN.md §9). -->
+        <service
+            android:name=".worker.TransferJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            tools:targetApi="34" />
+
+        <!-- The ongoing notification's "Pause transfers" action. -->
+        <receiver
+            android:name=".worker.PauseTransfersReceiver"
+            android:exported="false" />
 
         <!-- WorkManager is initialised on demand from StableShareApp (Configuration.Provider). -->
         <provider

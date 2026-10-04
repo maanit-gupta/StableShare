@@ -587,6 +587,8 @@ All notifications use the small icon `ic_stat_plane` and accent colour `#7BBCA5`
 
 The ongoing notification shows a determinate progress bar (overall bytes) and updates at most once per second.
 
+The ongoing notification has one action button, "Pause transfers" (string `notif_pause_transfers`): it pauses every queued, running or retrying transfer (as the Pause action does; a transfer that is verifying finishes). On Android 14+, a run started by a user action is a user-initiated data transfer job; it shows the same ongoing notification (its own notification id, removed by the system when the job ends), and the system lists the app in its Task Manager while the job runs.
+
 ## 6. State presentation (single table)
 
 "List" columns apply to Transfers rows; "Detail" columns apply to the detail hero. `{dir}` is "Uploading" or "Downloading"; `{done}` is "Uploaded" or "Downloaded".

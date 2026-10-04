@@ -14,7 +14,11 @@ class StableShareApp : Application(), Configuration.Provider {
         private set
 
     override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder().setWorkerFactory(container.workerFactory).build()
+        get() = Configuration.Builder()
+            .setWorkerFactory(container.workerFactory)
+            // WorkManager's JobScheduler ids stay below the UIDT job's fixed id (UidtJobScheduler.JOB_ID).
+            .setJobSchedulerJobIdRange(0, WORK_MANAGER_MAX_JOB_ID)
+            .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -23,5 +27,9 @@ class StableShareApp : Application(), Configuration.Provider {
         container.connectivityMonitor.start()
         container.engineBootstrap.start()
         container.resultNotifier.start()
+    }
+
+    companion object {
+        const val WORK_MANAGER_MAX_JOB_ID = 999_999
     }
 }
