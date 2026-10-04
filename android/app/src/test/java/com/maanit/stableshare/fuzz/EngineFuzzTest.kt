@@ -58,13 +58,14 @@ import kotlin.time.Duration.Companion.seconds
  * Layer B: the real engine, pipelines, controller and repository against [FakeTransferServer]
  * with seeded faults, under virtual time. Room and file I/O run on the test dispatcher, so a seed
  * replays the same interleaving. Each scenario: 1–5 transfers (uploads and downloads, 0 bytes and
- * non-multiples of the chunk size), maxConcurrent 1–3, then random pauses, resumes, cancels,
+ * non-multiples of the chunk size), maxConcurrent 1–3, parallelChunks 1, 2 or 4, then random pauses, resumes, cancels,
  * manual retries, network flips and process deaths; run to quiescence, then (faults off, network
  * back) resume everything paused or failed and run to quiescence again.
  *
  * I8 COMPLETED ⇒ VERIFIED event and delivered bytes == source. I9 CANCELLED ⇒ nothing after the
  * cancel but cleanup, and cleanup ran. I10 the server stores only chunks equal to the source.
- * I11 never more than maxConcurrent pipelines, or TRANSFERRING+VERIFYING rows, at any state change.
+ * I11 never more than maxConcurrent pipelines, or TRANSFERRING+VERIFYING rows, at any state change,
+ * and never more than maxConcurrent × parallelChunks chunk requests in flight.
  * I12 nothing leaves COMPLETED/CANCELLED; every change is a legal edge. I13 CHUNK_DONE only while
  * TRANSFERRING. Liveness: with faults off and the network back, every non-cancelled transfer completes.
  */
@@ -105,6 +106,8 @@ class EngineFuzzTest {
         private val server = FakeTransferServer()
         private val net = FakeConnectivity()
         private val maxConcurrent = rnd.nextInt(1, 4)
+        /** Chunks in flight per transfer; its own generator, so adding it did not reshuffle older seeds' other choices. */
+        private val parallelChunks = listOf(1, 2, 4).random(Random(seed * 15_485_863 + 5))
         private val faultRate = listOf(0.0, 0.1, 0.2, 0.35).random(rnd)
         private var faultsOn = true
         private val sources = linkedMapOf<String, Source>()
@@ -126,10 +129,10 @@ class EngineFuzzTest {
             // whole ticks, so requests, actions and wake-ups often coincide and interleave both ways.
             val maxTicks = listOf(1L, 5L, 15L).random(rnd)
             server.onRequest = { delay(faultRnd.nextLong(0, maxTicks + 1) * TICK) }
-            var settings = Settings(maxConcurrent = maxConcurrent, uploadChunkSizeBytes = EngineHarness.CHUNK)
+            var settings = Settings(maxConcurrent = maxConcurrent, uploadChunkSizeBytes = EngineHarness.CHUNK, parallelChunks = parallelChunks)
             var process = Process(this, dispatcher, db, settings)
             try {
-                log += "maxConcurrent=$maxConcurrent faultRate=$faultRate"
+                log += "maxConcurrent=$maxConcurrent parallelChunks=$parallelChunks faultRate=$faultRate"
                 repeat(rnd.nextInt(1, 6)) { create(process) }
                 repeat(rnd.nextInt(10, 40)) { step ->
                     delay(rnd.nextLong(0, 16) * TICK)
@@ -340,6 +343,8 @@ class EngineFuzzTest {
 
             // I11: replay every state change in commit order.
             assertTrue("I11: $maxActiveSeen pipelines at once > $maxConcurrent", maxActiveSeen <= maxConcurrent)
+            val peakChunks = server.peakChunkRequests.get()
+            assertTrue("I11: $peakChunks chunk requests at once > $maxConcurrent × $parallelChunks", peakChunks <= maxConcurrent * parallelChunks)
             val states = mutableMapOf<String, TransferState>()
             for (e in allEvents.sortedBy { it.id }) {
                 if (e.type != EventType.STATE_CHANGE) continue
