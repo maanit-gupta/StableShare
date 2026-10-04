@@ -1,0 +1,37 @@
+name: Chaos test
+
+# Manual only: the chaos test moves 200 MB each way, so it never runs on push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chaos:
+    name: Chaos test (200 MB up and down, kill -9, faults)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server
+    env:
+      TMPDIR: ${{ runner.temp }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run seed
+      - run: ./scripts/chaos-test.sh
+      # chaos-test.sh keeps its logs in $TMPDIR/stableshare-chaos.* when it fails.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: chaos-logs
+          path: ${{ runner.temp }}/stableshare-chaos.*
+          retention-days: 14
+          if-no-files-found: ignore
