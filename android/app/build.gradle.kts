@@ -63,6 +63,9 @@ android {
         unitTests.all {
             // Robolectric reaches into FileDescriptor internals, which JDK 17+ hides by default.
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED", "--add-opens=java.base/java.io=ALL-UNNAMED")
+            // Fuzz tests (test/.../fuzz): -Pfuzz.seeds=N runs N seeds per layer, -Pfuzz.seed=S replays one.
+            it.systemProperty("fuzz.seeds", project.findProperty("fuzz.seeds") ?: "200")
+            project.findProperty("fuzz.seed")?.let { seed -> it.systemProperty("fuzz.seed", seed) }
         }
     }
 }

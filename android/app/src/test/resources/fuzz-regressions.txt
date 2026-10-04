@@ -1,0 +1,2 @@
+# Fuzz seeds that once failed; they always run. One per line: <layer> <seed>
+# Layers: repository (RepositoryModelTest), engine (EngineFuzzTest).
