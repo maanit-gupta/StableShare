@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.2b Instant upload: client and UI** (`plan/6b-instant-upload.md`).
+Next step: **finish 6.2b: only the MANUAL CHECK is left** (code, tests and docs committed: 9d74c4a, 2084ce8, b8bc235). Start the mock server (`cd server && npm start`, port 8080) and the emulator, `./gradlew installDebug`, upload the 200 MB generated test file, then upload the identical file again (same picked URI) → it finishes in seconds, shows "Already on server" on the row/History/detail plus the "Data sent" row, and `curl localhost:8080/admin/stats` shows `instantUploads: 1`. Then tick 6.2b. Do not redo the code.
 Before it (user, optional): push `phase-5-safety-net`, confirm CI is green with the fuzz tests, and run Actions → "Chaos test" once.
 
 ## Checklist
@@ -22,7 +22,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 6.1a Wi-Fi only: engine and tests (`plan/6a-wifi-only.md`) (2026-10-04: already shipped in d7f485c; every behaviour and tests (a)–(i) present in WifiOnlyTest, NetworkGuardTest, ErrorClassifierTest, WakeupPlanTest, WorkManagerSchedulerTest; DESIGN §7/§9 cover it; 285 JVM tests green; no code change)
 - [x] 6.1b Wi-Fi only: UI, copy and docs (2026-10-04: already shipped in 90dd329/2eda46b; all copy in strings.xml + UI-SPEC §5.4/5.10/6/7/8; only gap was a §7 METERED_NETWORK copy test, added; 286 JVM tests green; manual check = the Feature 1 emulator run recorded in CLAUDE.md, not repeated)
 - [x] 6.2a Instant upload: server (`plan/6b-instant-upload.md`) (2026-10-04: 1172a70; 43 server tests green incl. 11 in `test/instant.test.js`; chaos script passes)
-- [ ] 6.2b Instant upload: client and UI
+- [~] 6.2b Instant upload: client and UI (2026-10-04: engine + UI + docs done, 301 JVM tests green, fuzz 2000 seeds green with 291 instant completions; manual emulator check pending)
 - [ ] 6.3a Parallel chunks: server safety (`plan/6c-parallel-chunks.md`)
 - [ ] 6.3b Parallel chunks: engine [APPROVE]
 - [ ] 6.3c Parallel chunks: UI and benchmark
@@ -67,4 +67,5 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - Fuzz: `./gradlew :app:testDebugUnitTest --tests '*fuzz*' -Pfuzz.seeds=2000` (repo ≈ 66 s, engine ≈ 51 s; default 200 ≈ 12 s). Replay: `-Pfuzz.seed=S`. Regression seeds in `app/src/test/resources/fuzz-regressions.txt` (`<layer> <seed>`). Changing the scenario generator reshuffles seeds: re-find a reproducing seed for each regression entry (revert the fix, search with a large `fuzz.seeds`).
 - Engine fuzz is deterministic: Room uses `setQueryCoroutineContext(testDispatcher)` and FileStore gets the same dispatcher (EngineHarness `io`). Process death = the old process's clock throws (every repository write needs it), then its scope is cancelled. I11 counts pipelines and TRANSFERRING+VERIFYING rows; RETRYING rows with a persisted backoff from a dead process hold no slot by design, so they are not counted.
 - Instant upload (server): linked file is `completed/<id>.bin` (code's name; plan said `<id>-<fileName>`). Every create body has `instant`; COMPLETED ones also `sha256`, and a repeated create of an instant session still says `instant: true`. 200 = instant, 201 = new. Android's Json has `ignoreUnknownKeys = true`, so old clients are unaffected. Baseline: 43 server tests.
+- Instant upload (client): `CreateSessionResponse.instant`/`sha256` default to absent; EventType is stored by name, so INSTANT_UPLOAD needed no migration. Pill flag = `TransferRepository.observeInstantUploadIds()` (lists) or the detail's own events. `FakeTransferServer.instantUploads` (default on) and `reportedSha` drive tests; `EngineHarness.upload(fileName=)` makes an identical copy without rewriting (and re-mtiming) a file another upload is reading. Fuzz re-uploads use a separate `reuseRnd`, so older seeds kept their scenarios (seed 1346 re-checked: still fails with the fix reverted). Baseline: 301 Android JVM tests.
 - Bug found by fuzzing (engine seed 1346): RETRY_SCHEDULED logged after a concurrent cancel → fixed with `TransferRepository.logEventWhile`.
