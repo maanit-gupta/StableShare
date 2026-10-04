@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.3a Parallel chunks: server safety** (`plan/6c-parallel-chunks.md`, section `## 6.3a`).
+Next step: **6.3b Parallel chunks: engine [APPROVE]** (`plan/6c-parallel-chunks.md`, section `## 6.3b`). Show the plan and wait for approval before changing code.
 Before it (user, optional): push `phase-5-safety-net`, confirm CI is green with the fuzz tests, and run Actions → "Chaos test" once.
 
 ## Checklist
@@ -23,7 +23,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 6.1b Wi-Fi only: UI, copy and docs (2026-10-04: already shipped in 90dd329/2eda46b; all copy in strings.xml + UI-SPEC §5.4/5.10/6/7/8; only gap was a §7 METERED_NETWORK copy test, added; 286 JVM tests green; manual check = the Feature 1 emulator run recorded in CLAUDE.md, not repeated)
 - [x] 6.2a Instant upload: server (`plan/6b-instant-upload.md`) (2026-10-04: 1172a70; 43 server tests green incl. 11 in `test/instant.test.js`; chaos script passes)
 - [x] 6.2b Instant upload: client and UI (2026-10-04: 9d74c4a, 2084ce8, b8bc235; 301 JVM tests green, fuzz 2000 seeds green; manual check on API 37 emulator: 200 MB picked file uploaded normally (1 min 48 s, Verified ec3375d6…a1da), identical re-upload COMPLETED in ~6 s with 2 API requests, `instantUploads: 1`, "Already on server" pill in History + detail, Details "Data sent: None, the server already had this file", activity shows the INSTANT_UPLOAD line)
-- [ ] 6.3a Parallel chunks: server safety (`plan/6c-parallel-chunks.md`)
+- [x] 6.3a Parallel chunks: server safety (`plan/6c-parallel-chunks.md`) (2026-10-04: 6436163; server already serialised meta.json per uploadId with KeyedLock, so no code change; 4 tests in `test/concurrency.test.js`, all 4 fail with the lock bypassed; 47 server tests green; DESIGN §6.4 + fault table updated)
 - [ ] 6.3b Parallel chunks: engine [APPROVE]
 - [ ] 6.3c Parallel chunks: UI and benchmark
 - [ ] 6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE] (`plan/6d-uidt.md`)
@@ -70,3 +70,4 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - Instant upload (client): `CreateSessionResponse.instant`/`sha256` default to absent; EventType is stored by name, so INSTANT_UPLOAD needed no migration. Pill flag = `TransferRepository.observeInstantUploadIds()` (lists) or the detail's own events. `FakeTransferServer.instantUploads` (default on) and `reportedSha` drive tests; `EngineHarness.upload(fileName=)` makes an identical copy without rewriting (and re-mtiming) a file another upload is reading. Fuzz re-uploads use a separate `reuseRnd`, so older seeds kept their scenarios (seed 1346 re-checked: still fails with the fix reverted). Baseline: 301 Android JVM tests.
 - Manual instant-upload checks: the Upload screen's test-file chips write fresh random bytes each time (`FileStore.generateTestFile` seeds with nanoTime), so for an identical re-upload `adb push` one file to /sdcard/Download and pick it twice through the system picker. The detail's "Data sent" row lives in the collapsed "Details" card at the bottom.
 - Bug found by fuzzing (engine seed 1346): RETRY_SCHEDULED logged after a concurrent cancel → fixed with `TransferRepository.logEventWhile`.
+- Server parallel chunks: `KeyedLock` (per uploadId) already guarded meta.json; `bandwidthKbps` is per request (each body throttled from its own start), so N parallel chunks get N × the limit; the 6.3c benchmark notes must say so. Baseline: 47 server tests.
