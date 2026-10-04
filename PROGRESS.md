@@ -6,15 +6,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **5.1 GitHub Actions CI**
-Exact next action: start the step from the top of its section in `plan/5-safety-net.md`.
+Next step: **5.1u [USER] push and confirm the CI run is green**
+Exact next action (user): CI triggers only on push/PR to `main`. Push branch `phase-5-safety-net` and open a PR into `main` (or fast-forward `main` to it and push), then watch workflow "CI" in the Actions tab. Red → paste the last ~40 log lines with "5.1 failed in CI:" and run `/next`. Green → tick 5.1u.
 
 ## Checklist
 
 Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done before this plan.
 
 ### Phase 5 — Safety net
-- [ ] 5.1 GitHub Actions CI (`plan/5-safety-net.md`)
+- [x] 5.1 GitHub Actions CI (`plan/5-safety-net.md`) — workflows "CI" (`ci.yml`: jobs `server`, `android`) and "Chaos test" (`chaos.yml`, workflow_dispatch only)
 - [ ] 5.1u [USER] push and confirm the CI run is green
 - [ ] 5.2 Model-based and fuzz tests
 
@@ -58,4 +58,8 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 
 ## Gotchas (short, durable facts that save re-discovery)
 
-(none yet)
+- The plan arrived in `StableShare-masterplan/`; moved to the repo root (MASTER-PLAN.md, PROGRESS.md, plan/, .claude/commands/next.md). Work is on branch `phase-5-safety-net`, cut from `feature-1-wifi-only`; local `main` is 8 commits behind it.
+- Wi-Fi only already shipped before this plan (CLAUDE.md "Feature 1", commits d7f485c, 90dd329, 2eda46b). At 6.1a/6.1b, diff the plan against the existing code before building anything.
+- JDK: Gradle daemon toolchain is pinned to 25 (`android/gradle/gradle-daemon-jvm.properties`); CI uses temurin 25. Node LTS used in CI: 24.
+- Action majors (checked 2026-10-04): checkout@v7, setup-node@v7, setup-java@v6, gradle/actions/setup-gradle@v6, upload-artifact@v7.
+- Clean clone builds without local.properties when ANDROID_HOME is set (runners set it); debug build needs no keystore. Baseline: 32 server tests, 282 Android JVM tests.
