@@ -85,6 +85,26 @@ class ParallelChunksTest {
         server.onRequest = { c -> if (c.op == Op.CHUNK || c.op == Op.RANGE) delay(100) }
     }
 
+    /**
+     * Like [slowChunks], but chunk requests first wait (up to 10 s of real time) until [n] are in
+     * flight together, then the gate stays open. Workers read their chunk on real I/O threads while
+     * the 100 ms delay is virtual, so without the gate a slow read under full-suite load let one
+     * request finish before the last worker started, and the peak came out as n − 1.
+     */
+    private fun EngineHarness.overlappingChunks(n: Int) {
+        val open = java.util.concurrent.atomic.AtomicBoolean(false)
+        server.onRequest = { c ->
+            if (c.op == Op.CHUNK || c.op == Op.RANGE) {
+                val deadline = System.nanoTime() + 10_000_000_000L
+                while (!open.get() && server.activeChunkRequests.get() < n && System.nanoTime() < deadline) {
+                    withContext(Dispatchers.IO) { Thread.sleep(1) }
+                }
+                open.set(true)
+                delay(100)
+            }
+        }
+    }
+
     /** Holds the first attempt of every chunk request with index ≥ [from] until it is cancelled. */
     private fun EngineHarness.holdFrom(op: Op, from: Int) {
         server.onRequest = { c -> if (c.op == op && (c.index ?: -1) >= from && c.attempt == 1) awaitCancellation() }
@@ -97,7 +117,7 @@ class ParallelChunksTest {
         for (n in listOf(2, 4)) {
             val h = harness(n)
             val meter = BufferMeter(h)
-            h.slowChunks()
+            h.overlappingChunks(n)
             val (t, bytes) = h.upload(9 * chunk + 100, seed = n)
             h.engine.run()
 
@@ -116,7 +136,7 @@ class ParallelChunksTest {
         for (n in listOf(2, 4)) {
             val h = harness(n)
             val meter = BufferMeter(h)
-            h.slowChunks()
+            h.overlappingChunks(n)
             val (t, bytes) = h.download(9 * chunk + 100, seed = n)
             h.engine.run()
 
