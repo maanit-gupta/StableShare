@@ -355,7 +355,7 @@ stateDiagram-v2
 | QUEUED | PAUSED | The user pauses before the transfer starts. |
 | QUEUED | CANCELLED | The user cancels before the transfer starts. |
 | TRANSFERRING | VERIFYING | Every chunk is confirmed, so full-file verification starts: `complete` for uploads, a local re-hash for downloads. |
-| TRANSFERRING | RETRYING | A retryable error occurred and the pipeline is backing off, or the network is gone (`NETWORK_UNAVAILABLE`, which consumes no attempt). |
+| TRANSFERRING | RETRYING | A retryable error occurred and the pipeline is backing off, or the network may not be used: gone (`NETWORK_UNAVAILABLE`) or metered while Wi-Fi only is on (`METERED_NETWORK`). Neither consumes an attempt. |
 | TRANSFERRING | PAUSED | The user pauses. The in-flight call is cancelled, and progress already written is kept. |
 | TRANSFERRING | FAILED | A fatal error occurred, or retries ran out. |
 | TRANSFERRING | CANCELLED | The user cancels. The pipeline stops, deletes the server session or `.part` file, and writes nothing more. |
@@ -474,20 +474,20 @@ Every metadata write follows the same sequence: write `*.tmp`, fsync the file, `
 - **Callers of `ensureRunning()`:**
   - app start, when QUEUED/TRANSFERRING/RETRYING/VERIFYING rows exist (`EngineBootstrap`)
   - a new transfer, resume, manual retry (`TransferController`)
-  - an offline → online edge that promoted waiting rows
-  - a `maxConcurrent` change
+  - a false → true edge of `usableNetwork` (always, so QUEUED rows held back by the gate start too)
+  - a `maxConcurrent` or `wifiOnly` change
   - the wake-up worker
 
 ### 6.2 Run loop
-1. `reconcileAfterProcessStart()` (§9), then `promoteDueRetries()` (RETRYING with a past `nextRetryAt` → QUEUED), then `promoteWaitingForNetwork()` if online.
-2. Event loop on a conflated wake channel. It is fed by `observeTransfers()`, `maxConcurrent` changes, connectivity changes (an offline → online edge promotes network waiters), job completions, and a timer for the earliest future `nextRetryAt` of a RETRYING row this run does not own. Nothing polls.
+1. `reconcileAfterProcessStart()` (§9), then `promoteDueRetries()` (RETRYING with a past `nextRetryAt` → QUEUED), then `promoteWaitingForNetwork()` if the network is usable.
+2. Event loop on a conflated wake channel. It is fed by `observeTransfers()`, `maxConcurrent` changes, `usableNetwork` changes (a false → true edge promotes network waiters), job completions, and a timer for the earliest future `nextRetryAt` of a RETRYING row this run does not own. Nothing polls.
 3. Each pass:
    - Cancel the Job of any transfer whose row has left {TRANSFERRING, RETRYING, VERIFYING} (paused, cancelled, failed, completed, deleted).
-   - Read `maxConcurrent` fresh and fill `maxConcurrent − running` slots with `claimNextQueued(free, exclude = running ids)`.
+   - Read `maxConcurrent` fresh and fill `maxConcurrent − running` slots with `claimNextQueued(free, exclude = running ids)`. **Nothing is claimed while `usableNetwork` is false** (offline, or metered with Wi-Fi only on), and a run with nothing claimable then exits instead of spinning.
    - Each claimed row gets a pipeline Job in a `SupervisorJob` scope, so one crash does not kill the others.
    - Lowering the limit pre-empts nothing; running jobs finish, and no new job starts until the count is below the new limit.
 4. **Exclusion.** A pipeline that backs off in-process keeps its slot, and its row is RETRYING with a `nextRetryAt`. Without `exclude`, the coordinator could claim that row a second time once the backoff falls due.
-5. **Exit** when no job runs and nothing is QUEUED or due. Before exiting, `WakeupPlan.compute` schedules unique work `"transfer-coordinator-wakeup"` (REPLACE) for what is left: `initialDelay` = time to the earliest `nextRetryAt`, with `NetworkType.CONNECTED`. Network-only waiters use a 5 s floor, so a disagreement between the monitor and a failing request cannot spin faster than that. If nothing waits, any wake-up is cancelled. The wake-up worker only calls `ensureRunning()`.
+5. **Exit** when no job runs and nothing is runnable (QUEUED or due, with a usable network). Before exiting, `WakeupPlan.compute` schedules unique work `"transfer-coordinator-wakeup"` (REPLACE) for what is left: `initialDelay` = time to the earliest `nextRetryAt`, with `NetworkType.CONNECTED`, or `NetworkType.UNMETERED` while Wi-Fi only is on. While the network is unusable, QUEUED rows and due retries count as network waiters. Network-only waiters use a 5 s floor, so a disagreement between the monitor and a failing request cannot spin faster than that. If nothing waits, any wake-up is cancelled. The wake-up worker only calls `ensureRunning()`.
 6. The coordinator never writes COMPLETED; only a pipeline's verification step does (rule 3).
 
 ### 6.3 Foreground service and notification
@@ -527,7 +527,7 @@ OkHttp has `retryOnConnectionFailure = false`, so every retry is a deliberate de
 | Class | Triggers | Action |
 |---|---|---|
 | **RETRYABLE** | socket/read/connect timeout, connection reset or EOF mid-body, HTTP 5xx (except 507), 429, chunk-hash mismatch on a download (data corrupted in transit), 422 `CHUNK_HASH_MISMATCH` on upload (body corrupted in transit) | `TRANSFERRING → RETRYING`, backoff, retry. Consumes one attempt for that chunk. |
-| **WAITING** | no validated network (ConnectivityManager reports none, or `UnknownHostException`/`ConnectException` while offline) | `→ RETRYING` with code `NETWORK_UNAVAILABLE`. **No attempt consumed.** Resumes on the connectivity callback (or the WorkManager `CONNECTED` constraint). |
+| **WAITING** | the network may not be used: none with INTERNET (`NETWORK_UNAVAILABLE`), or metered while Wi-Fi only is on (`METERED_NETWORK`); detected after a transport failure, or by the network guard below | `→ RETRYING` with that code and no `nextRetryAt`. **No attempt consumed.** Resumes when `usableNetwork` turns true (or the WorkManager `CONNECTED` / `UNMETERED` constraint). |
 | **FATAL** | 404 `SESSION_NOT_FOUND`/`FILE_NOT_FOUND`; 409 `SESSION_CONFLICT`/`CHUNK_CONFLICT`/`SESSION_COMPLETED`; 413; 416; 200 instead of 206 (remote changed); source size/mtime/hash changed or source missing; the same chunk failing its hash 5 times; `FILE_HASH_MISMATCH`; local disk full (`ENOSPC`) or 507 | `→ FAILED` with `errorCode` and `errorMessage`. Manual retry is possible (keeps progress). |
 
 Special cases:
@@ -552,12 +552,22 @@ Special cases:
 | HTTP 416 | Fatal `REMOTE_FILE_CHANGED` (the file shrank) |
 | HTTP 400 `INCOMPLETE_BODY` | treated as a transport drop (next row) |
 | HTTP 413, other 4xx | Fatal `UNKNOWN` (a client bug; retrying cannot help) |
-| any other IOException, **no network** (`ConnectivityChecker`) | WaitForNetwork (`NETWORK_UNAVAILABLE`, no attempt consumed) |
+| `NetworkUnusableException(code)` (the network guard stopped the request) | WaitForNetwork(code) |
+| any other IOException while the network is **unusable** (`NetworkBlocker.blockReason()`) | WaitForNetwork(`NETWORK_UNAVAILABLE` if offline, `METERED_NETWORK` if metered with Wi-Fi only on; no attempt consumed) |
 | `SocketTimeoutException` / `InterruptedIOException`, online | Retryable `TIMEOUT` |
 | any other IOException, online | Retryable `CONNECTION_LOST` |
 | anything else | Fatal `UNKNOWN` |
 
-Connectivity is checked for timeouts too, so an offline timeout waits instead of burning attempts. `TIMEOUT` and `CONNECTION_LOST` are *ambiguous* (`Outcome.isAmbiguous`): before resending a chunk PUT or `complete`, the pipeline calls GET status (§8). When the 5 attempts of a chunk are used up, the transfer fails with `RETRIES_EXHAUSTED`. `ConnectivityChecker` requires an active network with the INTERNET capability but not VALIDATED, because a LAN-only network hosting the mock server never passes Android's internet validation.
+Connectivity is checked for timeouts too, so an offline timeout waits instead of burning attempts. `TIMEOUT` and `CONNECTION_LOST` are *ambiguous* (`Outcome.isAmbiguous`): before resending a chunk PUT or `complete`, the pipeline calls GET status (§8). When the 5 attempts of a chunk are used up, the transfer fails with `RETRIES_EXHAUSTED`. `NetworkState` is Offline without an active network with the INTERNET capability (VALIDATED is not required, because a LAN-only network hosting the mock server never passes Android's internet validation), Unmetered with NOT_METERED, and Metered otherwise.
+
+**Wi-Fi only.** `Settings.wifiOnly` (DataStore `wifi_only`, default off). `ConnectivityMonitor` exposes `networkState` and `usableNetwork` (Offline → false, Metered → !wifiOnly, Unmetered → true; until DataStore answers, Wi-Fi only counts as on). A request on a metered network succeeds, so classifying failures cannot keep data off mobile networks. Every pipeline request therefore goes through `NetworkGuard` (`GuardedTransferApi`):
+1. If the network is unusable, the request waits up to **1500 ms** for it to become usable, and otherwise never starts.
+2. While it runs, a watcher cancels it (and its OkHttp Call) once `usableNetwork` has been false for 1500 ms in one stretch, so a Wi-Fi roaming blip interrupts nothing. Switching Wi-Fi only on over mobile data takes the same path.
+3. Both throw `NetworkUnusableException(code)` → RETRYING with the code, no attempt consumed, the chunk is not marked FAILED, and the job ends to free its slot. DONE chunks stay DONE; on resume the upload re-syncs from GET status (rule 7).
+4. A job sleeping in a backoff wakes early when the network has been unusable for 1500 ms. RETRYING → RETRYING is not a transition, so it goes RETRYING → TRANSFERRING → RETRYING(code) (the same path as a backoff that ends with no network).
+5. Local-only work (hashing an upload's source, a download's full-file check and finalise) uses no data and runs on until the job's next request.
+
+Only the engine's traffic is gated. Requests the user starts (Test connection, the file list and manifest when adding a download, the simulator, the health banner check, cancel cleanup) go out regardless. While rows wait, `EngineBootstrap` keeps their code in step with the network: METERED_NETWORK on mobile data, NETWORK_UNAVAILABLE when offline (`recodeNetworkWaiters`, which changes only `errorCode`/`errorMessage` and logs an INFO event, never the state).
 
 **Backoff**, full jitter, where `attempt` counts the failures of this chunk so far (1, 2, …):
 ```
@@ -576,7 +586,7 @@ delay(attempt) = random_uniform(0, min(30 s, 1 s × 2^(attempt−1)))
 3. It CASes `RETRYING → TRANSFERRING` and retries the same step. A lost CAS (paused or cancelled meanwhile) ends the job silently.
 4. VERIFYING steps (`complete`, local hash) restart the pipeline from the top after the backoff instead (GET status, then `complete` again).
 
-WaitForNetwork moves the row to `RETRYING NETWORK_UNAVAILABLE` with `nextRetryAt = null` and **ends the job**, which frees the slot. `ConnectivityMonitor` (a NetworkCallback exposed as a StateFlow) and the coordinator promote such rows to QUEUED on an offline → online edge. A process-level collector then calls `ensureRunning()`.
+WaitForNetwork moves the row to `RETRYING NETWORK_UNAVAILABLE` or `RETRYING METERED_NETWORK` with `nextRetryAt = null` and **ends the job**, which frees the slot. On a false → true edge of `usableNetwork` (a NetworkCallback combined with the Wi-Fi only setting), the coordinator and a process-level collector promote such rows to QUEUED (only RETRYING rows move, so PAUSED and CANCELLED never do), and the collector calls `ensureRunning()`.
 
 **No infinite loops.** Every loop in the engine is bounded:
 - *Chunk retry loop:* each turn consumes one persisted attempt, up to 5, or ends the job (WaitForNetwork, FAILED, lost CAS).
@@ -586,7 +596,7 @@ WaitForNetwork moves the row to `RETRYING NETWORK_UNAVAILABLE` with `nextRetryAt
   - Upload session loss: one recreation, then `FAILED SESSION_NOT_FOUND`.
   - Download full-file mismatch: one recovery, and the second consecutive mismatch is `FAILED FILE_HASH_MISMATCH`.
   - Part file vanished before verification: rebuilding the file costs at least one chunk fetch, which is itself bounded.
-- *Waiting for the network:* the job ends. The transfer runs again only after an external offline → online edge, or a wake-up with a CONNECTED constraint and a 5 s floor.
+- *Waiting for the network:* the job ends. The transfer runs again only after an external usable edge, or a wake-up with a CONNECTED (UNMETERED under Wi-Fi only) constraint and a 5 s floor. The guard's wait before a request is bounded by 1500 ms.
 - *Coordinator loop:* it blocks on events or a deadline, and it exits when nothing is runnable.
 - *Wake-up → coordinator → exit cycles:* each needs a due backoff (which itself consumes an attempt) or a connectivity signal.
 - *Restarts after process death or a system stop:* these are external events, not loops.
@@ -624,7 +634,8 @@ Every failure therefore ends in success, a consumed attempt, an external signal,
 | **Reboot** | WorkManager persists its jobs and re-enqueues them after boot through its own `RECEIVE_BOOT_COMPLETED` receiver. The coordinator starts, reconciles and resumes. |
 | **System stop** | WorkManager stops the worker: quota, constraints, the Android 15 6-hour `dataSync` foreground-service limit (`STOP_REASON_FOREGROUND_SERVICE_TIMEOUT`), or its own reschedule after a process restart. `getStopReason()` is logged. A stop is an **interruption, not a failure**: `doWork()` is cancelled, `TransferEngine.run` cancels and joins every pipeline, then in `NonCancellable` moves each interrupted row from its active state to QUEUED (CAS with `expectedFrom`, so a row the user paused meanwhile is untouched). It logs an INFO event "Interrupted by a system stop (reason); requeued", with no error code and no attempt consumed. WorkManager re-runs stopped work, and a backstop wake-up is scheduled 15 s later with a CONNECTED constraint. Jobs that had already ended on their own (FAILED, waiting for network) are not requeued. |
 | **Force-stop (Settings → Force stop, or `adb shell am force-stop`)** | **Platform limitation.** Android cancels all jobs and alarms of a force-stopped app, and nothing may restart it until the user launches it again. Transfers simply stay in their persisted state. On the next launch, `Application.onCreate` enqueues the coordinator, and reconciliation resumes everything. This is documented and not worked around. |
-| **Restart reconciliation** | `reconcileAfterProcessStart()` runs once per process, before the coordinator claims work, in one transaction. Rows in TRANSFERRING or VERIFYING go to QUEUED with a STATE_CHANGE and an INFO "Reconciled after process start" event. It returns the ids it moved; the engine adds them to an in-memory `RestoredTransfers` set (pruned by `EngineBootstrap` once a row is terminal or deleted) so the UI can mark them "Restored after restart" (UI-SPEC §5.4.2). RETRYING rows are left as they are. One with `nextRetryAt` is promoted or claimed once that time passes. One waiting for network (`nextRetryAt = null`) is moved RETRYING → QUEUED when the coordinator starts online, or on an offline → online edge seen by `ConnectivityMonitor`. Every coordinator run reconciles before it claims anything. This is safe because runs never overlap, and a run does not return until all its pipelines have ended. QUEUED, PAUSED, FAILED, COMPLETED and CANCELLED are left untouched, so a **cancelled transfer is never revived** (rule 4). For downloads, the newest DONE chunks are re-verified against their manifest hashes on disk before resuming (§10). For uploads, GET status overrides the local chunk table, because the server is the source of truth (rule 7). |
+| **Wi-Fi ↔ mobile data** | With Wi-Fi only off, nothing changes: a metered network is as good as Wi-Fi. With it on, losing Wi-Fi to mobile data stops every running request within 1500 ms (or the request fails first because the old socket died) → `RETRYING METERED_NETWORK`, no attempt consumed, slots freed, and the coordinator exits with an UNMETERED wake-up. QUEUED rows stay QUEUED (the gate) and show "Waiting for Wi-Fi". Going fully offline re-codes waiting rows to NETWORK_UNAVAILABLE and back. When Wi-Fi returns, waiting rows are promoted and the coordinator restarts by itself. Observed on the API 37 emulator (`svc wifi disable/enable` during a 200 MB upload with Flaky Wi-Fi): `apiRequests` stayed flat for 25–70 s on mobile data in each of three cycles, and the upload resumed by itself and was verified. |
+| **Restart reconciliation** | `reconcileAfterProcessStart()` runs once per process, before the coordinator claims work, in one transaction. Rows in TRANSFERRING or VERIFYING go to QUEUED with a STATE_CHANGE and an INFO "Reconciled after process start" event. It returns the ids it moved; the engine adds them to an in-memory `RestoredTransfers` set (pruned by `EngineBootstrap` once a row is terminal or deleted) so the UI can mark them "Restored after restart" (UI-SPEC §5.4.2). RETRYING rows are left as they are. One with `nextRetryAt` is promoted or claimed once that time passes. One waiting for the network (`nextRetryAt = null`) is moved RETRYING → QUEUED when the coordinator starts with a usable network, or on a usable edge seen by `ConnectivityMonitor`. Every coordinator run reconciles before it claims anything. This is safe because runs never overlap, and a run does not return until all its pipelines have ended. QUEUED, PAUSED, FAILED, COMPLETED and CANCELLED are left untouched, so a **cancelled transfer is never revived** (rule 4). For downloads, the newest DONE chunks are re-verified against their manifest hashes on disk before resuming (§10). For uploads, GET status overrides the local chunk table, because the server is the source of truth (rule 7). |
 
 ---
 
@@ -700,5 +711,7 @@ Where it is "Tested" by:
 | 28 | Server keeps failing a chunk | 5 attempts with full-jitter backoff, then `FAILED RETRIES_EXHAUSTED` with DONE chunks kept. Manual retry sends only the rest. | `RetryRunner` | `UploadPipelineTest` "twoServerErrorsThenSuccess", "serverErrorsForeverExhaustRetriesKeepingProgressAndManualRetrySendsOnlyTheRest", "autoRetryOffFailsOnTheFirstRetryableError" |
 | 29 | Idle keep-alive connection closed by the server | The client's pool evicts idle sockets after 4 s, before the server's 5 s keep-alive closes them, so no request is sent on a dead socket. | `ProtocolClient.buildOkHttp` | `ProtocolClientTest` "idleConnectionsAreEvictedBeforeTheServerClosesThem" (a server that closes idle sockets like Node; fails with the old pool) |
 | 30 | Coordinator started while the app is in the background | Android refuses the foreground start; the work continues and the promotion is retried every 10 s until it is allowed, so the ongoing notification appears once the app is foreground. | `ForegroundPromoter` | `ForegroundPromoterTest`; verified on the API 37 emulator after a reinstall-triggered restart |
+| 31 | Wi-Fi only on, Wi-Fi lost to mobile data mid-chunk | The in-flight request is cancelled 1500 ms after `usableNetwork` turns false (or fails first because its socket died) → `RETRYING METERED_NETWORK`, no attempt consumed, DONE chunks kept; nothing is claimed or sent until an unmetered network returns, then the rows are promoted and resume (WifiOnlyTest). A blip shorter than 1500 ms interrupts nothing. |
+| 32 | Wi-Fi only switched on while transferring over mobile data | Same path as #31 (`usableNetwork` turns false). Switching it off on mobile data makes the network usable: waiting rows resume. |
 
 The UI that sits on this engine is specified in [UI-SPEC.md](UI-SPEC.md) and summarised in the [README](../README.md#11-ui-and-design).

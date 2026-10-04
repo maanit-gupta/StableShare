@@ -37,7 +37,7 @@ COMPLETED, CANCELLED → terminal
 
 ## Error classification
 - RETRYABLE: timeouts, connection reset, HTTP 5xx, 429 → backoff with full jitter (base 1 s, ×2, cap 30 s), max 5 attempts per chunk, then FAILED RETRIES_EXHAUSTED.
-- WAITING: no network → RETRYING with NETWORK_UNAVAILABLE, no attempts consumed, resume on connectivity.
+- WAITING: no network → RETRYING with NETWORK_UNAVAILABLE; metered network with Wi-Fi only on → RETRYING with METERED_NETWORK. No attempts consumed, resume when usableNetwork turns true. The engine sends nothing while usableNetwork is false (NetworkGuard, 1500 ms debounce).
 - FATAL: 404 session/file gone, 409 conflict, 413, 416, source changed/missing, remote file changed, repeated hash mismatch, disk full → FAILED with code and message.
 
 ## Protocol summary (full spec: DESIGN.md §3)
@@ -68,6 +68,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - [x] Phase 2 — Android foundation (data/domain layer) (2026-10-03: 112 JVM unit tests green; health() verified from the API 37 emulator; branch phase-2-android-foundation)
 - [x] Phase 3 — Transfer engine (2026-10-03: 163 JVM unit tests green; emulator chaos run with kill -9 → both 200 MB transfers COMPLETED, hashes match; branch phase-3-transfer-engine)
 - [ ] Phase 4 — UI, README, release APK
+- [x] Feature 1 — Wi-Fi only (2026-10-04: 282 JVM unit tests green; emulator `svc wifi disable/enable` ×3 during a 200 MB upload: apiRequests flat on mobile data, upload resumed and verified; branch feature-1-wifi-only)
 
 ## Decisions (append: date — decision — why)
 - 2026-10-03 — Server on Express 5 (ESM), sole runtime dependency; tests use node:test + supertest — matches server/CLAUDE.md, async handlers forward errors natively.
@@ -110,6 +111,11 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-04 — Compose UI tests run under Robolectric in testDebugUnitTest; instrumented PickedFileUploadTest drives the real system picker with UI Automator 2.4.0 (needs the mock server on the host).
 - 2026-10-04 — README's 12 requirements are a reconstruction approved by the user (assignment text not in the repo). Screens that scroll under the transparent status bar draw a page-coloured scrim (UI-SPEC §5.3).
 - 2026-10-04 — The user renamed phase-4-ui to main and pushed it (main now holds Phases 1–4); phase-2/phase-3 branches remain as ancestors.
+- 2026-10-04 — Wi-Fi only: ErrorCode is stored by name (TEXT), so METERED_NETWORK needed no Room migration (round-trip test instead).
+- 2026-10-04 — Proactive stop lives at the request level (NetworkGuard/GuardedTransferApi, pipelines only), not as a job-level watchdog: it cancels in-flight calls after 1500 ms unusable, makes new calls wait ≤ 1500 ms, lets local-only work (hashing, verify, finalise) finish, and ends a backoff early via RETRYING → TRANSFERRING → RETRYING(code) (no RETRYING → RETRYING in the state machine).
+- 2026-10-04 — Wi-Fi only gates engine traffic only; user-started requests (health, Test connection, file list/manifest, simulator, cancel DELETE) still go out. Wi-Fi only counts as on until DataStore answers.
+- 2026-10-04 — Waiting rows are re-coded live (METERED_NETWORK ↔ NETWORK_UNAVAILABLE) by EngineBootstrap via recodeNetworkWaiters, which writes only errorCode/errorMessage plus an INFO event, never the state column.
+- 2026-10-04 — QUEUED rows while wifiOnly && network != Unmetered show "Waiting for Wi-Fi" (inkSecondary, Wi-Fi title/stats; QUEUED mascot/ring/plane) — user decision, UI-SPEC §6. DataStore key is `wifi_only` (snake_case like the others).
 
 ## Open issues (append; remove when resolved)
 - Server disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem). Android DISK_FULL is tested.
@@ -117,3 +123,4 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - REMOTE_FILE_CHANGED manual retry reuses the stored ETag and fails again; UI-SPEC's copy tells the user to cancel and download again (no "download again" action in the spec).
 - After kill -9, resumption took ~18 s on API 37 (WorkManager stops its stale run on restart; the 15 s backstop wake-up / reschedule restarts it). Generated test files are never deleted.
 - Phase 4 blocked on android/keystore.properties (missing): signed assembleRelease, release/StableShare-1.0.0.apk, release smoke test (onboarding, 200 MB up + down with Flaky Wi-Fi, kill -9 on Pixel_9_root, Restored pill, both Verified) and the final report remain.
+- Wi-Fi only: the classifier is shared, so a user-started request (e.g. Settings → Test connection) that fails on mobile data with Wi-Fi only on reads "Couldn't connect: Waiting for Wi-Fi". Up to one request can start on mobile data in the instant before the network callback reports the switch (seen once in three emulator cycles).

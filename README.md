@@ -38,7 +38,7 @@ All screenshots are in [docs/screenshots](docs/screenshots). The design is in [d
 | 1 | Upload large files (up to 1 GB) in chunks | Client-generated upload id, idempotent session create, 1/2/5 MB pieces each sent with `X-Chunk-SHA256`, sequential per transfer. Files come from the system picker (SAF, persisted read grant) or are generated test files. | [UploadPipeline](android/app/src/main/java/com/maanit/stableshare/engine/UploadPipeline.kt), [FileStore](android/app/src/main/java/com/maanit/stableshare/data/files/FileStore.kt), [server uploads](server/src/routes/uploads.js) |
 | 2 | Download large files with ranged requests | Manifest with per-chunk hashes, `Range` + `If-Range` per chunk, written into a per-transfer `.part` file at its offset. | [DownloadPipeline](android/app/src/main/java/com/maanit/stableshare/engine/DownloadPipeline.kt), [server files](server/src/routes/files.js) |
 | 3 | Pause and resume | Pause is a CAS to PAUSED; the coordinator cancels the job (and its OkHttp call). Resume continues after the last DONE chunk; uploads re-sync from the server's list. | [TransferController](android/app/src/main/java/com/maanit/stableshare/engine/TransferController.kt), [TransferEngine](android/app/src/main/java/com/maanit/stableshare/engine/TransferEngine.kt) |
-| 4 | Survive network loss and resume automatically | No network = RETRYING `NETWORK_UNAVAILABLE`, no attempt consumed, slot released; an offline → online edge (NetworkCallback) or a CONNECTED WorkManager wake-up resumes it. | [ConnectivityMonitor](android/app/src/main/java/com/maanit/stableshare/engine/ConnectivityMonitor.kt), [ErrorClassifier](android/app/src/main/java/com/maanit/stableshare/data/net/ErrorClassifier.kt) |
+| 4 | Survive network loss and resume automatically | No network = RETRYING `NETWORK_UNAVAILABLE`, no attempt consumed, slot released; a usable-network edge (NetworkCallback) or a CONNECTED WorkManager wake-up resumes it; with Wi-Fi only on, a metered network counts as unusable (METERED_NETWORK). | [ConnectivityMonitor](android/app/src/main/java/com/maanit/stableshare/engine/ConnectivityMonitor.kt), [ErrorClassifier](android/app/src/main/java/com/maanit/stableshare/data/net/ErrorClassifier.kt) |
 | 5 | Timeouts and server errors with bounded retries | Classified RETRYABLE / WAITING / FATAL; full-jitter exponential backoff (1 s base, ×2, 30 s cap), 5 attempts per chunk, persisted; then FAILED `RETRIES_EXHAUSTED` with progress kept. | [RetryRunner](android/app/src/main/java/com/maanit/stableshare/engine/RetryRunner.kt), [RetryPolicy](android/app/src/main/java/com/maanit/stableshare/domain/RetryPolicy.kt) |
 | 6 | Lost responses | A timed-out chunk PUT or `complete` is followed by `GET status` before any resend; the server dedupes identical chunks (`already_received`) and `complete` is idempotent. | [UploadPipeline](android/app/src/main/java/com/maanit/stableshare/engine/UploadPipeline.kt) (`confirmedViaStatus`) |
 | 7 | App kill, process death, restart, reboot | Room is the source of truth; WorkManager re-runs the unique coordinator; restart reconciliation moves TRANSFERRING/VERIFYING back to QUEUED; the UI marks them "Restored after restart". | [TransferRepository](android/app/src/main/java/com/maanit/stableshare/data/repo/TransferRepository.kt) (`reconcileAfterProcessStart`), [RestoredTransfers](android/app/src/main/java/com/maanit/stableshare/engine/RestoredTransfers.kt) |
@@ -49,6 +49,7 @@ All screenshots are in [docs/screenshots](docs/screenshots). The design is in [d
 | 12 | Deliverables: source, README, signed APK | This repository, this README, [docs/DESIGN.md](docs/DESIGN.md), and `release/StableShare-1.0.0.apk`. | [release/](release) |
 
 ### Beyond the requirements
+- **Wi-Fi only** (Settings → Transfers): when on, no transfer request goes over a metered network. Running transfers stop within 1.5 s of losing Wi-Fi (brief roaming blips are ignored) without using a retry attempt, show "Waiting for Wi-Fi", and resume by themselves on Wi-Fi; a banner on Transfers explains why. See §8 and [DESIGN.md §7](docs/DESIGN.md#7-retry-and-error-classification).
 - **Network simulator in the app** (Settings): presets (Slow network, Flaky Wi-Fi, Lost responses, Corruption, Chaos), per-fault sliders and live injected-fault counters from `/admin/stats`.
 - **Per-transfer activity log** (every state change, piece run, retry, lost-response confirmation) and a live **chunk map** on the detail screen.
 - **Mascot-led UI** with two deliberate visual styles, full reduced-motion support and accessibility semantics (§11).
@@ -308,10 +309,17 @@ Every button in the UI comes from `allowedActions(state)`, and every action is a
 | Class | Examples | What happens |
 |---|---|---|
 | **RETRYABLE** | timeout, connection reset or dropped body, HTTP 5xx (not 507), 429, a piece corrupted in transit (hash mismatch) | RETRYING, backoff, retry the same step; uses one of the piece's 5 attempts |
-| **WAITING** | no usable network | RETRYING `NETWORK_UNAVAILABLE`, **no attempt used**, job ends and frees its slot; resumes on reconnect |
+| **WAITING** | no network, or a metered one while Wi-Fi only is on | RETRYING `NETWORK_UNAVAILABLE` / `METERED_NETWORK`, **no attempt used**, job ends and frees its slot; resumes when the network is usable again |
 | **FATAL** | session or file gone (404), conflict (409), 413, 416, remote file changed (200 instead of 206), source changed or missing, whole-file hash mismatch, disk full | FAILED with a code and message; manual Retry keeps finished pieces |
 
 Mapping table: [DESIGN.md §7](docs/DESIGN.md#7-retry-and-error-classification); code: [ErrorClassifier](android/app/src/main/java/com/maanit/stableshare/data/net/ErrorClassifier.kt).
+
+### Wi-Fi only
+A request on mobile data succeeds, so error handling alone cannot keep data off it. `ConnectivityMonitor` reports `NetworkState` (Offline, Metered, Unmetered) and `usableNetwork` (Metered counts only while Wi-Fi only is off), and:
+- **The coordinator claims nothing** while the network is unusable; it exits with a WorkManager wake-up constrained to `UNMETERED` (Wi-Fi only) or `CONNECTED`.
+- **`NetworkGuard`** wraps every request the engine makes: a request waits up to 1.5 s for a usable network before it starts, and is cancelled (with its OkHttp call) once the network has been unusable for 1.5 s. That stops a transfer as `RETRYING METERED_NETWORK` with no attempt used; finished pieces stay finished. Turning the switch on over mobile data does the same. A backoff in progress is cut short too.
+- **Resuming:** when the network becomes usable, waiting rows go back to QUEUED and the coordinator restarts. Rows that are PAUSED or CANCELLED are never touched. While waiting, a row's code follows the network (METERED_NETWORK on mobile data, NETWORK_UNAVAILABLE offline).
+- Only transfer traffic is gated; things you start yourself (Test connection, the server file list, the simulator) still go out.
 
 ### Backoff
 ```
@@ -324,7 +332,7 @@ Every loop is bounded:
 - **Pieces:** each retry consumes a persisted attempt, at most 5, then FAILED `RETRIES_EXHAUSTED`.
 - **Non-chunk steps:** at most 5 per pipeline run.
 - **Restarts inside a pipeline:** at most 2 `MISSING_CHUNKS` re-syncs, at most 1 session recreation, at most 1 whole-file mismatch repair.
-- **Network waits:** these end the job; only an external offline → online edge or a CONNECTED wake-up (5 s floor) restarts it.
+- **Network waits:** these end the job; only an external usable-network edge or a CONNECTED/UNMETERED wake-up (5 s floor) restarts it. The guard's wait before a request is at most 1.5 s.
 - **The coordinator:** blocks on events or a deadline, and exits when nothing is runnable.
 
 So every failure ends in success, a consumed attempt, an external signal, or FAILED.
@@ -361,6 +369,7 @@ On every coordinator start (once per process in practice) `reconcileAfterProcess
 | Reboot | WorkManager re-enqueues its persisted work after boot. |
 | System stop (quota, the 6-hour `dataSync` limit, constraints, WorkManager reschedule) | An interruption, not a failure: running rows go back to QUEUED with an INFO event ("Interrupted by a system stop (reason)"), no error code, no attempt used; rows the user paused meanwhile are untouched; a 15 s backstop wake-up is scheduled. The stop reason is logged. |
 | Network lost / restored | §8: wait without using attempts, resume on the edge. |
+| Wi-Fi ↔ mobile data (Wi-Fi only on) | Running transfers stop within 1.5 s and wait as "Waiting for Wi-Fi"; queued ones are not started; they resume by themselves on Wi-Fi. Verified on the API 37 emulator with `adb shell svc wifi disable/enable` during a 200 MB upload: `/admin/stats` `apiRequests` stayed flat for 25–70 s on mobile data in each of three cycles, and the upload finished verified. |
 | **Force stop** | **Platform limitation:** Android cancels every job and alarm of a force-stopped app and forbids restarting it until the user opens it again. Transfers stay in their persisted state and resume on the next launch. This is documented, not worked around. |
 | Notification permission denied | Transfers run normally; notifications are simply not shown. |
 | Local network permission denied (Android 17+) | Transport errors to the private-range server become FAILED "Local network permission denied" instead of burning retries; Retry works once granted. |
@@ -441,6 +450,7 @@ From [DESIGN.md §11](docs/DESIGN.md#11-edge-case-catalogue), where each one nam
 | 28 | Server keeps failing a piece | 5 attempts, then FAILED with finished pieces kept; Retry sends only the rest. |
 | 29 | Idle keep-alive closed by the server | Pool evicts idle sockets first (4 s < 5 s), no wasted attempt. |
 | 30 | Coordinator started in the background | Foreground promotion retried until allowed, so the notification appears. |
+| 31 | Wi-Fi lost with Wi-Fi only on | Requests stopped within 1.5 s, RETRYING `METERED_NETWORK` without using attempts, nothing claimed on mobile data; resumes on Wi-Fi. |
 
 ---
 
@@ -450,7 +460,7 @@ From [DESIGN.md §11](docs/DESIGN.md#11-edge-case-catalogue), where each one nam
 |---|---|---|---|
 | Server | `cd server && npm test` | 32 | Protocol, idempotency, ranges and `If-Range`, restart durability, session expiry, every fault type |
 | Chaos (CLI client) | `cd server && npm run chaos` | 1 scenario | 200 MB up and down under errors, drops, lost responses and corruption, each run `kill -9`'d mid-transfer and resumed; asserts the hashes and that faults fired |
-| Android JVM | `cd android && ./gradlew testDebugUnitTest` | 232 | State machine, repository CAS and guards (in-memory Room), protocol client (MockWebServer), classifier, retry policy, the real engine against an in-memory server with virtual time (pause, cancel, system stop, process death, lost responses, corruption, network loss), notifications, and Compose UI tests under Robolectric |
+| Android JVM | `cd android && ./gradlew testDebugUnitTest` | 282 | Wi-Fi only (network guard and 1.5 s debounce, gate, re-coding, resume; virtual time), state machine, repository CAS and guards (in-memory Room), protocol client (MockWebServer), classifier, retry policy, the real engine against an in-memory server with virtual time (pause, cancel, system stop, process death, lost responses, corruption, network loss), notifications, and Compose UI tests under Robolectric |
 | Android instrumented | `cd android && ./gradlew connectedDebugAndroidTest` | 2 | App launch; a file picked through the real system picker (SAF) uploads to the running mock server with a persisted read grant and a server-verified hash |
 
 The Compose UI tests check:
