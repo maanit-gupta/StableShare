@@ -121,6 +121,7 @@ class EngineHarness(
     settings: Settings = Settings(maxConcurrent = 2, uploadChunkSizeBytes = CHUNK),
     sleep: (suspend (Long) -> Unit)? = null,
     io: CoroutineDispatcher = Dispatchers.IO,
+    previousExitByUser: () -> Boolean = { false },
 ) {
     val settings = MutableStateFlow(settings)
     val repo = TransferRepository(db, clock)
@@ -159,6 +160,7 @@ class EngineHarness(
         wakeups = { wakeups += it; onWakeup(it) },
         clock = clock,
         lease = lease,
+        previousExitByUser = previousExitByUser,
     )
     val scheduler = TransferScheduler { userInitiated ->
         ensureRunningCalls += clock()

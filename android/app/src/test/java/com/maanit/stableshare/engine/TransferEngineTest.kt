@@ -386,6 +386,59 @@ class TransferEngineTest {
     fun processDeathMidChunkDownloadResumesFromLastDoneChunk() = processDeath(Op.RANGE) { h -> h.download(6 * chunk).first.id }
 
     /**
+     * Task Manager "Stop" / Force stop: process A dies mid-chunk and the next process learns from the
+     * exit record that the user stopped it. Its first run pauses the row instead of resuming it and
+     * sends nothing; a later run in the same process does not re-apply the exit reason; the user's
+     * resume then completes the transfer from the last DONE chunk.
+     */
+    @Test
+    fun userStoppedProcessLeavesItsTransferPausedUntilResumed() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, File(dir, "transfers.db").path).build()
+        val server = FakeTransferServer()
+        val a = EngineHarness(context, dir, System::currentTimeMillis, server = server, db = db).also { harnesses += it }
+        val id = a.upload(6 * chunk).first.id
+
+        val reached = CompletableDeferred<Unit>()
+        server.onRequest = { c -> if (c.op == Op.CHUNK && c.index == 3 && c.attempt == 1) { reached.complete(Unit); awaitCancellation() } }
+        val executor = Executors.newSingleThreadExecutor()
+        val processA = CoroutineScope(executor.asCoroutineDispatcher() + Job())
+        processA.launch { a.engine.run() }
+        withTimeout(10_000) { reached.await() }
+        val release = CountDownLatch(1)
+        val frozen = CountDownLatch(1)
+        executor.execute { frozen.countDown(); release.await() }
+        assertTrue(frozen.await(10, TimeUnit.SECONDS))
+        assertEquals(TRANSFERRING, a.state(id))
+
+        server.onRequest = {}
+        var exitReads = 0
+        val b = EngineHarness(context, dir, System::currentTimeMillis, server = server, db = db, previousExitByUser = { exitReads++; true })
+        val requestsBefore = server.count(Op.CHUNK, 3)
+        withContext(Dispatchers.Default) { withTimeout(20_000) { b.engine.run() } }
+
+        assertEquals("the user's stop is kept", PAUSED, b.state(id))
+        assertTrue("a paused row is not shown as restored", b.engine.restoredIds.value.isEmpty())
+        assertEquals("nothing was sent for it", requestsBefore, server.count(Op.CHUNK, 3))
+        assertEquals(TRANSFERRING to PAUSED, b.stateChanges(id).last())
+
+        withContext(Dispatchers.Default) { withTimeout(20_000) { b.engine.run() } }
+        assertEquals("a second run does not touch it", PAUSED, b.state(id))
+        assertEquals("the exit reason is read once per process", 1, exitReads)
+
+        assertTrue(b.controller.resume(id))
+        withContext(Dispatchers.Default) { withTimeout(20_000) { b.engine.run() } }
+        assertEquals(COMPLETED, b.state(id))
+        (0 until 3).forEach { assertEquals("chunk $it sent once", 1, server.count(Op.CHUNK, it)) }
+
+        processA.cancel()
+        release.countDown()
+        withTimeout(10_000) { processA.coroutineContext.job.join() }
+        executor.shutdown()
+        assertEquals("the dead process never writes again", COMPLETED, b.state(id))
+    }
+
+    /**
      * Process A is "killed" mid-chunk by freezing its only thread forever (no cleanup runs, the row
      * stays TRANSFERRING). Process B — new engine, repository and tracker on the same database and
      * server — must reconcile, resume after the last DONE chunk and reach COMPLETED only via VERIFYING.

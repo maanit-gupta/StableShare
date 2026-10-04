@@ -69,8 +69,12 @@ class TransferEngine(
     private val clock: () -> Long = System::currentTimeMillis,
     private val restored: RestoredTransfers = RestoredTransfers(),
     private val lease: RunLease = RunLease(),
+    private val previousExitByUser: () -> Boolean = { false },
 ) {
     private val accepting = AtomicBoolean(false)
+
+    /** Set once the first run of this process has reconciled; later runs never apply the exit reason. */
+    private val exitReasonUsed = AtomicBoolean(false)
     private val jobs = ConcurrentHashMap<String, Job>()
     private val active = MutableStateFlow<Set<String>>(emptySet())
 
@@ -134,7 +138,8 @@ class TransferEngine(
     }
 
     private suspend fun CoroutineScope.coordinate() {
-        restored.add(repo.reconcileAfterProcessStart())
+        val stoppedByUser = !exitReasonUsed.getAndSet(true) && previousExitByUser()
+        restored.add(repo.reconcileAfterProcessStart(stoppedByUser))
         repo.promoteDueRetries()
         if (connectivity.usableNetwork.value) repo.promoteWaitingForNetwork()
 

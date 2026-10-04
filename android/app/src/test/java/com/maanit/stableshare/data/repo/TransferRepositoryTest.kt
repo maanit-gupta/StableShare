@@ -517,6 +517,31 @@ class TransferRepositoryTest {
     }
 
     @Test
+    fun reconciliationAfterAUserStopPausesTransferringAndRequeuesVerifying() = runBlocking {
+        val transferring = upload().also { moveTo(it, TRANSFERRING) }
+        val verifying = upload().also { moveTo(it, TRANSFERRING, VERIFYING) }
+        val retrying = upload().also {
+            moveTo(it, TRANSFERRING)
+            repo.transition(it, RETRYING, ErrorCode.TIMEOUT, "t", nextRetryAt = 99)
+        }
+        val queued = upload()
+        val cancelled = upload().also { moveTo(it, CANCELLED) }
+
+        assertEquals("only the VERIFYING row counts as restored", listOf(verifying), repo.reconcileAfterProcessStart(stoppedByUser = true))
+        assertEquals(PAUSED, state(transferring))
+        assertEquals(QUEUED, state(verifying))
+        assertEquals(RETRYING, state(retrying))
+        assertEquals(QUEUED, state(queued))
+        assertEquals(CANCELLED, state(cancelled))
+        val events = repo.getEvents(transferring)
+        assertTrue(events.any { it.type == EventType.STATE_CHANGE && it.toState == PAUSED && it.message.contains("app stopped by the user") })
+        assertTrue("a paused row is not 'restored'", events.none { it.type == EventType.INFO && it.message.contains("Reconciled") })
+        assertTrue(repo.getEvents(verifying).any { it.type == EventType.INFO && it.message == "Reconciled after process start: VERIFYING → QUEUED" })
+        assertEquals(0, repo.reconcileAfterProcessStart(stoppedByUser = true).size)
+        assertEquals("the paused row stays paused", PAUSED, state(transferring))
+    }
+
+    @Test
     fun reconciliationKeepsDoneChunks() = runBlocking {
         val id = upload()
         moveTo(id, TRANSFERRING)

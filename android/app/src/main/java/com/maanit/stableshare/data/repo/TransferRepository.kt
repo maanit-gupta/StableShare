@@ -218,11 +218,24 @@ class TransferRepository(
      * Run once per process start: a TRANSFERRING or VERIFYING row means the previous process died
      * mid-flight, so it goes back to QUEUED. Terminal, PAUSED, FAILED and RETRYING rows are left
      * alone (RETRYING keeps its persisted backoff and is picked up by [claimNextQueued]).
-     * Returns the ids it moved (the UI shows them as "restored after restart").
+     *
+     * When [stoppedByUser] (the previous process was ended by the user: Task Manager "Stop" or
+     * Force stop), TRANSFERRING rows go to PAUSED instead, so they do not resume by themselves;
+     * VERIFYING rows still go to QUEUED (the state machine has no VERIFYING → PAUSED edge, the same
+     * mapping as a job stopped by the user).
+     *
+     * Returns the ids it moved back to QUEUED (the UI shows them as "restored after restart").
      */
-    suspend fun reconcileAfterProcessStart(): List<String> = db.withTransaction {
+    suspend fun reconcileAfterProcessStart(stoppedByUser: Boolean = false): List<String> = db.withTransaction {
         val stale = transfers.getInStates(listOf(TransferState.TRANSFERRING, TransferState.VERIFYING))
         stale.filter { row ->
+            if (stoppedByUser && row.state == TransferState.TRANSFERRING) {
+                transitionLocked(
+                    row.id, TransferState.PAUSED, null, null, null,
+                    expectedFrom = row.state, reason = "app stopped by the user",
+                )
+                return@filter false
+            }
             val ok = transitionLocked(
                 row.id, TransferState.QUEUED, null, null, null,
                 expectedFrom = row.state, reason = "reconciled after process start",

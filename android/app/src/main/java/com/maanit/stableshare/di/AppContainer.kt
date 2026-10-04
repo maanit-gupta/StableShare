@@ -22,6 +22,7 @@ import com.maanit.stableshare.engine.GuardedTransferApi
 import com.maanit.stableshare.engine.HostSelectingScheduler
 import com.maanit.stableshare.engine.NetworkGuard
 import com.maanit.stableshare.engine.PipelineEnv
+import com.maanit.stableshare.engine.PreviousProcessExit
 import com.maanit.stableshare.engine.RestoredTransfers
 import com.maanit.stableshare.engine.RunLease
 import com.maanit.stableshare.engine.TransferController
@@ -146,8 +147,11 @@ class AppContainer(context: Context) {
             wakeups = workManagerScheduler,
             restored = restoredTransfers,
             lease = runLease,
+            previousExitByUser = { previousProcessExit.stoppedByUser },
         )
     }
+
+    private val previousProcessExit by lazy { PreviousProcessExit(appContext) }
 
     val transferController: TransferController by lazy {
         TransferController(

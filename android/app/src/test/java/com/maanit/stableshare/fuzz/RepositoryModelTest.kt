@@ -61,6 +61,9 @@ class RepositoryModelTest {
 
     private class Scenario(val seed: Long) {
         private val rnd = Random(seed)
+
+        /** Separate stream for the previous exit reason, so older seeds keep their scenarios. */
+        private val exitRnd = Random(seed xor 0x5EED_E417L)
         private var now = 1_000L
         private val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), AppDatabase::class.java)
             .allowMainThreadQueries()
@@ -229,16 +232,22 @@ class RepositoryModelTest {
         }
 
         private suspend fun reconcile(): String {
+            val stoppedByUser = exitRnd.nextInt(3) == 0
             val before = model.keys.associateWith { repo.getTransfer(it) }
-            val expected = model.values.filter { it.isSyncable() }.map { it.id }
-            val moved = repo.reconcileAfterProcessStart()
+            val stale = model.values.filter { it.isSyncable() }
+            val paused = if (stoppedByUser) stale.filter { it.state == TRANSFERRING } else emptyList()
+            val expected = (stale - paused.toSet()).map { it.id }
+            val moved = repo.reconcileAfterProcessStart(stoppedByUser)
             assertEquals("I6: reconciled ids", expected.toSet(), moved.toSet())
             expected.forEach { model.getValue(it).apply { state = QUEUED; nextRetryAt = null } }
+            paused.forEach { it.state = PAUSED; it.nextRetryAt = null }
+            paused.forEach { assertEquals("I6: user stop pauses ${it.id}", PAUSED, repo.getTransfer(it.id)!!.state) }
             assertTrue("I6: nothing left TRANSFERRING/VERIFYING", repo.getInStates(TRANSFERRING, VERIFYING).isEmpty())
-            model.keys.filter { it !in expected }.forEach {
+            val touched = stale.map { it.id }.toSet()
+            model.keys.filter { it !in touched }.forEach {
                 assertEquals("I6: $it unchanged by reconcile", before[it], repo.getTransfer(it))
             }
-            return "reconcile = $moved"
+            return "reconcile(stoppedByUser = $stoppedByUser) = $moved, paused ${paused.map { it.id }}"
         }
 
         private suspend fun promoteDue(): String {
