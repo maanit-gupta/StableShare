@@ -123,6 +123,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-04 — Instant upload (client): on `instant` the pipeline marks all chunks DONE, logs INSTANT_UPLOAD once, goes VERIFYING and still compares `complete`'s sha256 with the local hash (mismatch → FAILED FILE_HASH_MISMATCH); a status-reported COMPLETED session takes the same route. "Already on server" pill on Transfers/Upload/History rows and under the detail file line; Details row "Data sent" placed after "Pieces".
 
 - 2026-10-04 — Parallel chunks engine (6.3b): `parallelChunks` 1/2/4 (default 1), fixed per job. N = 1 runs the unchanged sequential path; N > 1 runs a Semaphore(N) worker pool (permit before reading → ≤ N buffers), per-chunk backoff in place while TRANSFERRING, one terminal write via a per-run mutex, download tail re-check 2 × N. Per-chunk open+write+fsync kept instead of a shared FileChannel. DESIGN §6.4/7/8/10 updated.
+- 2026-10-04 — Parallel chunks UI/benchmark (6.3c): "Pieces at once per transfer" 1/2/4 below "Transfers at the same time"; a piece backing off in place shows "Piece {n} is retrying, attempt {a} of {max}." ({a} = failures so far, like RETRYING's line). Default stays 1 pending the user (docs/benchmarks.md).
 
 ## Open issues (append; remove when resolved)
 - Server disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem). Android DISK_FULL is tested.

@@ -6,8 +6,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.3c Parallel chunks: UI and benchmark** (`plan/6c-parallel-chunks.md`, section `## 6.3c`).
-Before it (user, optional): push `phase-5-safety-net`, confirm CI is green with the fuzz tests, and run Actions → "Chaos test" once.
+Next step: **6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE]** (`plan/6d-uidt.md`).
+Before it (user): decide the parallel-chunks default (docs/benchmarks.md; recommendation: keep 1) and answer the 6.3c questions below. Optional: push `phase-5-safety-net` and confirm CI is green.
 
 ## Checklist
 
@@ -25,7 +25,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 6.2b Instant upload: client and UI (2026-10-04: 9d74c4a, 2084ce8, b8bc235; 301 JVM tests green, fuzz 2000 seeds green; manual check on API 37 emulator: 200 MB picked file uploaded normally (1 min 48 s, Verified ec3375d6…a1da), identical re-upload COMPLETED in ~6 s with 2 API requests, `instantUploads: 1`, "Already on server" pill in History + detail, Details "Data sent: None, the server already had this file", activity shows the INSTANT_UPLOAD line)
 - [x] 6.3a Parallel chunks: server safety (`plan/6c-parallel-chunks.md`) (2026-10-04: 6436163; server already serialised meta.json per uploadId with KeyedLock, so no code change; 4 tests in `test/concurrency.test.js`, all 4 fail with the lock bypassed; 47 server tests green; DESIGN §6.4 + fault table updated)
 - [x] 6.3b Parallel chunks: engine [APPROVE] (2026-10-04: 4bfe6ff, 2587b46 + docs; 319 JVM tests green incl. 16 in `engine/ParallelChunksTest`; fuzz 2000 seeds green with N ∈ {1,2,4}; seed 1346 re-checked)
-- [ ] 6.3c Parallel chunks: UI and benchmark
+- [x] 6.3c Parallel chunks: UI and benchmark (2026-10-04: c5b6918 UI, 90be639 test de-flake, c258804/0b68c71/0e57920 benchmark harness, cd598d7 docs; 325 JVM tests green ×2; benchmark on Pixel_9_root API 37, table in docs/benchmarks.md)
 - [ ] 6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE] (`plan/6d-uidt.md`)
 - [ ] 6.4b UIDT: TransferJobService, scheduling, stop mapping
 - [ ] 6.4c UIDT: emulator verification and docs
@@ -54,7 +54,13 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 
 ## Open questions
 
-(none yet. Format: `step id: question`. I answer here or in chat.)
+(Format: `step id: question`. I answer here or in chat.)
+
+- 6.3c: Default for "Pieces at once per transfer"? Measured: fast link ≤ 1.26× at N = 4, Slow network 3.3–3.7× (inflated by the per-request throttle). Recommendation: keep 1.
+- 6.3c: Placement guessed (plan silent): the control sits directly below "Transfers at the same time" (UI-SPEC §5.10). OK?
+- 6.3c: Slow-network uploads time out: at 512 kbps a 2 MiB piece needs ~33 s, but OkHttp's 30 s read timeout (`ProtocolClient.kt:265`) starts once the body is in socket buffers. Pieces retry and still verify, but N = 1 upload takes 498 s vs 337 s download. Raise the read timeout for chunk PUTs, or scale it with piece size? Not changed (engine change outside 6.3c).
+- 6.3c: Server bug? `faults.js` throttles whenever `bandwidthKbps > 0`, even with `enabled: false` (latency and the rates do respect `enabled`). The UI's Off preset zeroes everything, so only API users hit it. Fix the server to gate on `enabled`?
+- 6.3c: `ParallelChunksTest.networkLossWithSeveralWorkersMakesExactlyOneRetryingTransition` failed once in an isolated class run (9 passes after, message not captured). Pre-existing 6.3b test, not touched by this step; worth a look if it shows up in CI.
 
 ## Gotchas (short, durable facts that save re-discovery)
 
@@ -71,4 +77,6 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - Manual instant-upload checks: the Upload screen's test-file chips write fresh random bytes each time (`FileStore.generateTestFile` seeds with nanoTime), so for an identical re-upload `adb push` one file to /sdcard/Download and pick it twice through the system picker. The detail's "Data sent" row lives in the collapsed "Details" card at the bottom.
 - Bug found by fuzzing (engine seed 1346): RETRY_SCHEDULED logged after a concurrent cancel → fixed with `TransferRepository.logEventWhile`.
 - Parallel chunks (engine): setting `parallelChunks`, key `parallel_chunks`, values 1/2/4. N = 1 keeps the old sequential path byte-for-byte (approved); N > 1 = `forEachChunkInParallel` + `RetryRunner.runChunkInPlace` (backoff stays TRANSFERRING, terminal outcomes behind a per-run mutex). Download writes keep per-chunk open+write+fsync instead of one shared FileChannel (approved). Tracker: `inFlightChunks` map, `inFlightChunk` = lowest index (UI unchanged until 6.3c). Test seams: `FakeTransferServer.peakChunkRequests`, `BufferMeter`; `FileStore.readChunk` is now `open`. Fuzz N uses its own Random. Baseline: 319 Android JVM tests.
+- Parallel chunks (UI, 6.3c): Settings tag `parallelChunks`; tracker `backoffChunks` (index → failed attempts, set by `chunkBackingOff` from `runChunkInPlace`'s onBackoff, cleared when the piece moves/commits or the phase leaves Transferring); `TransferItem.inFlightChunks`/`chunkBackoff`. Robolectric `captureToImage` times out; PiecesCardTest draws the decor view into a software bitmap under `@GraphicsMode(NATIVE)`. Robolectric tests that change maxConcurrent/wifiOnly need `WorkManagerTestInitHelper` (else a background exception fails a later test). Baseline: 325 Android JVM tests.
+- Benchmark (6.3c) headline: fast link, warm: upload N=1 40.7 s, N=2 41.0 s, N=4 34.6 s; download 26.4 / 23.8 / 21.0 s (200 MiB). Slow network (20 MiB): upload 498 / 236 / 136 s, download 337 / 170 / 102 s. The first case of a session runs cold (103 → 35 s), so warm up first. Run: `android/scripts/benchmark-parallel.sh` (~1.5 h); `bench-20MB` is seeded into server storage by the script.
 - Server parallel chunks: `KeyedLock` (per uploadId) already guarded meta.json; `bandwidthKbps` is per request (each body throttled from its own start), so N parallel chunks get N × the limit; the 6.3c benchmark notes must say so. Baseline: 47 server tests.
