@@ -15,8 +15,6 @@ jobs:
     defaults:
       run:
         working-directory: server
-    env:
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -26,7 +24,10 @@ jobs:
           cache-dependency-path: server/package-lock.json
       - run: npm ci
       - run: npm run seed
+      # The runner context is not available in job-level env, so TMPDIR is set here.
       - run: ./scripts/chaos-test.sh
+        env:
+          TMPDIR: ${{ runner.temp }}
       # chaos-test.sh keeps its logs in $TMPDIR/stableshare-chaos.* when it fails.
       - if: failure()
         uses: actions/upload-artifact@v7
