@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.4b UIDT: TransferJobService, scheduling, stop mapping** (`plan/6d-uidt.md`). Answer the 6.4b questions below first.
+Next step: **6.4b UIDT: TransferJobService, scheduling, stop mapping** (`plan/6d-uidt.md`). The 6.4b questions below are answered; follow those answers.
 Still open for the user: parallel-chunks default and the other 6.3c questions. Optional: push `phase-5-safety-net` and confirm CI is green.
 
 ## Checklist
@@ -62,9 +62,9 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - 6.3c: Server bug? `faults.js` throttles whenever `bandwidthKbps > 0`, even with `enabled: false` (latency and the rates do respect `enabled`). The UI's Off preset zeroes everything, so only API users hit it. Fix the server to gate on `enabled`?
 - 6.3c: `ParallelChunksTest.networkLossWithSeveralWorkersMakesExactlyOneRetryingTransition` failed once in an isolated class run (9 passes after, message not captured). Pre-existing 6.3b test, not touched by this step; worth a look if it shows up in CI. Likely cause found in 6.4a: `claimNextQueued(exclude = jobs.keys)` read a live key view that a finishing job could empty mid-copy (NoSuchElementException, seen once in UploadPipelineTest); fixed in 242f74e.
 
-- 6.4b: UIDT jobs must have a network constraint (JobInfo docs, API 34). When it is lost the system stops the job (`onStopJob`, reschedules), which today hits `requeueAfterStop` (QUEUED, "Interrupted by a system stop") instead of RETRYING NETWORK_UNAVAILABLE. Plan: constraint `NETWORK_TYPE_ANY` even with Wi-Fi only (NetworkGuard keeps deciding metered), and map STOP_REASON_CONSTRAINT_CONNECTIVITY to the waiting path. OK?
-- 6.4b: Task Manager "Stop" kills the process with no `onStopJob` and the app cannot reschedule that job; the docs recommend a stop/pause action in the job notification. UI-SPEC has none. Add a "Pause all" notification action (copy?), or leave it and rely on the WorkManager backstop + reconciliation?
-- 6.4b: A UIDT host that finds the WorkManager loop holding the lease returns at once, so those transfers keep running under the dataSync FGS. Acceptable, or should the job host wait for the lease?
+- 6.4b: UIDT jobs must have a network constraint (JobInfo docs, API 34). When it is lost the system stops the job (`onStopJob`, reschedules), which today hits `requeueAfterStop` (QUEUED, "Interrupted by a system stop") instead of RETRYING NETWORK_UNAVAILABLE. Plan: constraint `NETWORK_TYPE_ANY` even with Wi-Fi only (NetworkGuard keeps deciding metered), and map STOP_REASON_CONSTRAINT_CONNECTIVITY to the waiting path. ANSWER (user, 2026-10-04): yes.
+- 6.4b: Task Manager "Stop" kills the process with no `onStopJob` and the app cannot reschedule that job; the docs recommend a stop/pause action in the job notification. UI-SPEC has none. Add a "Pause all" notification action (copy?), or leave it and rely on the WorkManager backstop + reconciliation? ANSWER (user, 2026-10-04): yes, add it; button text "Pause transfers" (goes in strings.xml + UI-SPEC in the same commit).
+- 6.4b: A UIDT host that finds the WorkManager loop holding the lease returns at once, so those transfers keep running under the dataSync FGS. Acceptable, or should the job host wait for the lease? ANSWER (user, 2026-10-04): fine as built.
 
 ## Gotchas (short, durable facts that save re-discovery)
 
