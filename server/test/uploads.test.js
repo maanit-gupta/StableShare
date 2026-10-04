@@ -27,7 +27,7 @@ describe('create session', () => {
     const id = crypto.randomUUID();
     const file = crypto.randomBytes(3000);
     const first = await createSession(request, app, id, file).expect(201);
-    assert.deepEqual(first.body, { uploadId: id, totalChunks: 3, chunkSize: CS, receivedChunks: [], state: 'UPLOADING' });
+    assert.deepEqual(first.body, { uploadId: id, totalChunks: 3, chunkSize: CS, receivedChunks: [], state: 'UPLOADING', instant: false });
     const again = await createSession(request, app, id, file).expect(200);
     assert.deepEqual(again.body, first.body);
     const conflict = await createSession(request, app, id, file, { fileName: 'other.bin' }).expect(409);

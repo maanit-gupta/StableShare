@@ -9,11 +9,13 @@ export function storagePaths(root) {
     uploads: path.join(root, 'uploads'),
     completed: path.join(root, 'completed'),
     files: path.join(root, 'files'),
+    index: path.join(root, 'index'),
     uploadDir: (id) => path.join(root, 'uploads', id),
     uploadMeta: (id) => path.join(root, 'uploads', id, 'meta.json'),
     chunksDir: (id) => path.join(root, 'uploads', id, 'chunks'),
     chunkFile: (id, i) => path.join(root, 'uploads', id, 'chunks', `${i}.bin`),
     completedFile: (id) => path.join(root, 'completed', `${id}.bin`),
+    indexEntry: (sha256) => path.join(root, 'index', `${sha256}.json`),
     fileBin: (fileId) => path.join(root, 'files', `${fileId}.bin`),
     fileMeta: (fileId) => path.join(root, 'files', `${fileId}.meta.json`),
     manifest: (fileId, chunkSize) => path.join(root, 'files', `${fileId}.manifest.${chunkSize}.json`),
@@ -21,7 +23,7 @@ export function storagePaths(root) {
 }
 
 export async function ensureStorage(paths) {
-  await Promise.all([paths.uploads, paths.completed, paths.files].map((d) => fsp.mkdir(d, { recursive: true })));
+  await Promise.all([paths.uploads, paths.completed, paths.files, paths.index].map((d) => fsp.mkdir(d, { recursive: true })));
 }
 
 export function tmpName(target) {

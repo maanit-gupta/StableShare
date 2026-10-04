@@ -17,6 +17,8 @@ export function expectedChunkLength(meta, index) {
 }
 
 function receivedChunks(meta) {
+  // An instant session never received chunks but holds the whole file.
+  if (meta.state === 'COMPLETED') return Array.from({ length: meta.totalChunks }, (_, i) => i);
   return Object.keys(meta.chunks)
     .map(Number)
     .sort((a, b) => a - b);
@@ -31,6 +33,19 @@ function statusBody(meta) {
     totalChunks: meta.totalChunks,
     receivedChunks: receivedChunks(meta),
     state: meta.state,
+  };
+  if (meta.state === 'COMPLETED') body.sha256 = meta.result.sha256;
+  return body;
+}
+
+function createBody(meta) {
+  const body = {
+    uploadId: meta.uploadId,
+    totalChunks: meta.totalChunks,
+    chunkSize: meta.chunkSize,
+    receivedChunks: receivedChunks(meta),
+    state: meta.state,
+    instant: meta.instant === true,
   };
   if (meta.state === 'COMPLETED') body.sha256 = meta.result.sha256;
   return body;
@@ -81,6 +96,54 @@ function sameParams(meta, p) {
   );
 }
 
+// Hash index of completed uploads: index/<sha256>.json = {sha256, size, path, createdAt}, path relative
+// to the storage root. Callers hold the `sha:<sha256>` lock. Hash-only matching trusts the client's
+// declared sha256 (acceptable for a mock server; see DESIGN §3.1 "Instant upload").
+const indexLockKey = (sha256) => `sha:${sha256}`;
+
+async function writeIndexEntry(paths, sha256, size, file) {
+  const entry = { sha256, size, path: path.relative(paths.root, file), createdAt: Date.now() };
+  await atomicWriteJson(paths.indexEntry(sha256), entry);
+}
+
+// Places the indexed file at `target` (hard link, copy as fallback) and returns true, or removes a
+// stale entry (file missing or wrong size) and returns false.
+async function linkFromIndex(paths, sha256, size, target) {
+  const entry = await readJson(paths.indexEntry(sha256)).catch(() => null);
+  if (!entry) return false;
+  const source = path.resolve(paths.root, entry.path);
+  const st = await fsp.stat(source).catch(() => null);
+  if (entry.sha256 !== sha256 || entry.size !== size || !st?.isFile() || st.size !== size) {
+    await fsp.rm(paths.indexEntry(sha256), { force: true });
+    await fsyncDir(paths.index);
+    return false;
+  }
+  const tmp = tmpName(target);
+  try {
+    try {
+      await fsp.link(source, tmp);
+    } catch (err) {
+      if (err.code === 'ENOENT') throw err;
+      await fsp.copyFile(source, tmp);
+      const fh = await fsp.open(tmp, 'r+');
+      try {
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
+    }
+    if ((await fsp.stat(tmp)).size !== size) throw Object.assign(new Error('size changed'), { code: 'ESIZE' });
+    await fsp.rename(tmp, target);
+  } catch (err) {
+    await fsp.rm(tmp, { force: true });
+    if (err.code !== 'ENOENT' && err.code !== 'ESIZE') throw err;
+    await fsp.rm(paths.indexEntry(sha256), { force: true });
+    return false;
+  }
+  await fsyncDir(path.dirname(target));
+  return true;
+}
+
 export function uploadsRouter(ctx) {
   const { paths, locks, faults } = ctx;
   const router = express.Router();
@@ -120,18 +183,30 @@ export function uploadsRouter(ctx) {
         createdAt: now,
         updatedAt: now,
       };
-      await fsp.mkdir(paths.chunksDir(id), { recursive: true });
+      // Instant upload: the server already holds these bytes. Zero-byte files have nothing to save.
+      // Bytes land (link + dir fsync) before the meta that marks the session COMPLETED.
+      const instant =
+        params.fileSize > 0 &&
+        (await locks.run(indexLockKey(params.sha256), () =>
+          linkFromIndex(paths, params.sha256, params.fileSize, paths.completedFile(id)),
+        ));
+      if (instant) {
+        Object.assign(created, {
+          state: 'COMPLETED',
+          instant: true,
+          completedAt: now,
+          result: { sha256: params.sha256, size: params.fileSize },
+        });
+        await fsp.mkdir(paths.uploadDir(id), { recursive: true });
+      } else {
+        await fsp.mkdir(paths.chunksDir(id), { recursive: true });
+      }
       await atomicWriteJson(paths.uploadMeta(id), created);
       await fsyncDir(paths.uploads);
-      return { status: 201, meta: created };
+      if (instant) faults.stats.instantUploads++;
+      return { status: instant ? 200 : 201, meta: created };
     });
-    res.status(status).json({
-      uploadId: meta.uploadId,
-      totalChunks: meta.totalChunks,
-      chunkSize: meta.chunkSize,
-      receivedChunks: receivedChunks(meta),
-      state: meta.state,
-    });
+    res.status(status).json(createBody(meta));
   });
 
   // Upload one chunk.
@@ -275,6 +350,7 @@ export function uploadsRouter(ctx) {
       Object.assign(meta, { state: 'COMPLETED', completedAt: now, updatedAt: now, result: { sha256: actual, size } });
       await atomicWriteJson(paths.uploadMeta(id), meta);
       await fsp.rm(paths.chunksDir(id), { recursive: true, force: true });
+      if (size > 0) await locks.run(indexLockKey(actual), () => writeIndexEntry(paths, actual, size, target));
       return completeBody(meta);
     });
     res.json(body);

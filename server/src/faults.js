@@ -40,6 +40,7 @@ function emptyStats() {
     apiRequests: 0,
     faults: { latency: 0, error: 0, timeout: 0, dropMidBody: 0, dropAfterProcess: 0, corrupt: 0 },
     dedupedChunks: 0,
+    instantUploads: 0,
   };
 }
 

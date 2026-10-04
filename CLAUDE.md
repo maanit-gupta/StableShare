@@ -47,6 +47,7 @@ Uploads (client-generated UUID as uploadId):
 - GET /api/uploads/:id — received chunk list (used on resume and after timeouts)
 - POST /api/uploads/:id/complete — assemble + verify SHA-256, idempotent
 - DELETE /api/uploads/:id — cancel cleanup
+- Instant upload: create answers `instant` (bool); a known sha256+size → 200 COMPLETED with all chunks and `sha256`, no chunks sent
 Downloads:
 - GET /api/files, GET /api/files/:id/manifest?chunkSize= (size, sha256, etag, per-chunk hashes)
 - GET /api/files/:id/content with Range + If-Range (200 instead of 206 = remote file changed)
@@ -118,6 +119,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-04 — Waiting rows are re-coded live (METERED_NETWORK ↔ NETWORK_UNAVAILABLE) by EngineBootstrap via recodeNetworkWaiters, which writes only errorCode/errorMessage plus an INFO event, never the state column.
 - 2026-10-04 — QUEUED rows while wifiOnly && network != Unmetered show "Waiting for Wi-Fi" (inkSecondary, Wi-Fi title/stats; QUEUED mascot/ring/plane) — user decision, UI-SPEC §6. DataStore key is `wifi_only` (snake_case like the others).
 - 2026-10-04 — Pipeline events go through `TransferRepository.logEventWhile(id, StateMachine.ACTIVE, …)` (state checked in the same transaction) — the engine fuzz found a RETRY_SCHEDULED log landing after a concurrent cancel. Controller cleanup logs stay unguarded.
+- 2026-10-04 — Instant upload (6.2a): hash index `index/<sha256>.json` (path relative to the storage root, under a `sha:<hash>` lock); instant sessions are hard-linked to `completed/<id>.bin` (the code's name, not the plan's `<id>-<fileName>`). Every create body has `instant`, and COMPLETED ones `sha256`, so a repeated create (lost response) still reads instant. Stale entries are dropped on lookup; deleting the indexed original makes the next identical upload a normal one, which re-indexes.
 
 ## Open issues (append; remove when resolved)
 - Server disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem). Android DISK_FULL is tested.

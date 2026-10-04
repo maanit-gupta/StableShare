@@ -20,7 +20,7 @@ export function createApp({
 } = {}) {
   if (!storageDir) throw new Error('storageDir is required');
   const paths = storagePaths(storageDir);
-  for (const dir of [paths.uploads, paths.completed, paths.files]) fs.mkdirSync(dir, { recursive: true });
+  for (const dir of [paths.uploads, paths.completed, paths.files, paths.index]) fs.mkdirSync(dir, { recursive: true });
 
   const ctx = {
     paths,

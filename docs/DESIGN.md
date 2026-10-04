@@ -132,8 +132,9 @@ Content-Type: application/json
 ```
 Response `201 Created` (new session) or `200 OK` (same id, identical params, including a completed session):
 ```json
-{"uploadId":"0f8fad5b-d9cb-469f-a165-70867728950e","totalChunks":3,"chunkSize":2097152,"receivedChunks":[],"state":"UPLOADING"}
+{"uploadId":"0f8fad5b-d9cb-469f-a165-70867728950e","totalChunks":3,"chunkSize":2097152,"receivedChunks":[],"state":"UPLOADING","instant":false}
 ```
+A session that is already `COMPLETED` also carries `"sha256"`.
 
 | Status | error | When |
 |---|---|---|
@@ -143,6 +144,13 @@ Response `201 Created` (new session) or `200 OK` (same id, identical params, inc
 | 409 | `SESSION_CONFLICT` | id exists with different fileName/fileSize/chunkSize/sha256 |
 
 A `fileSize` of 0 gives `totalChunks: 0`. Such a session can be completed straight away.
+
+**Instant upload.** The server keeps a hash index of completed uploads (`index/<sha256>.json` = `{sha256,size,path,createdAt}`, written atomically when `complete` succeeds). If a new session's declared `sha256` and `fileSize` (> 0) match an entry whose file still exists with that size, the session is created already `COMPLETED`: the file is hard-linked (copied if linking fails) to `completed/<uploadId>.bin`, so deleting one session never affects another. Response `200 OK`:
+```json
+{"uploadId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","totalChunks":3,"chunkSize":2097152,"receivedChunks":[0,1,2],"state":"COMPLETED","instant":true,"sha256":"9f86d0…"}
+```
+Repeating the create returns the same body. From then on it is an ordinary completed session: `GET` reports it, `complete` is idempotent, `DELETE` removes only its own link, a chunk `PUT` gets `409 SESSION_COMPLETED`. An entry whose file is missing or the wrong size is deleted and the request becomes a normal new upload. Zero-byte files are never instant. The client still compares the returned `sha256` with its own hash before marking the transfer COMPLETED.
+Known limitation: matching on the declared hash does not prove the client holds the bytes. Acceptable for a local mock server; a production server would add a challenge (for example, the hash of a random byte range).
 
 #### PUT /api/uploads/:uploadId/chunks/:index — upload one chunk
 Request:
@@ -278,7 +286,7 @@ The bytes are an AES-256-CTR keystream (a fast seeded PRNG) whose key is `sha256
 | `GET /admin/faults` | current fault config |
 | `PUT /admin/faults` | merge a partial config. Rates are validated to [0,1] (`400 INVALID_REQUEST` otherwise). Setting `seed` re-seeds the PRNG. Returns the full config. |
 | `POST /admin/faults/reset` | restore defaults (disabled, every rate 0, seed 1), re-seed and zero the stats; returns config |
-| `GET /admin/stats` | `{"requests":N,"apiRequests":N,"faults":{"latency":…,"error":…,"timeout":…,"dropMidBody":…,"dropAfterProcess":…,"corrupt":…},"dedupedChunks":N}` |
+| `GET /admin/stats` | `{"requests":N,"apiRequests":N,"faults":{"latency":…,"error":…,"timeout":…,"dropMidBody":…,"dropAfterProcess":…,"corrupt":…},"dedupedChunks":N,"instantUploads":N}` |
 | `POST /admin/files/:fileId/mutate` | rewrite 4 KiB in the middle of the file (or append 16 B to an empty file), recompute sha256 and ETag, drop cached manifests; returns the new file info |
 
 Fault config:
@@ -388,7 +396,8 @@ storage/
   uploads/<uploadId>/meta.json        {uploadId,fileName,fileSize,chunkSize,totalChunks,sha256,state,
                                         chunks:{"<i>":"<sha256>"},createdAt,updatedAt,completedAt?,result?}
   uploads/<uploadId>/chunks/<i>.bin   verified chunk bytes
-  completed/<uploadId>.bin            assembled, verified file
+  completed/<uploadId>.bin            assembled, verified file (or a hard link to one, for an instant upload)
+  index/<sha256>.json                 {sha256,size,path,createdAt}: hash index for instant uploads
   files/<fileId>.bin                  downloadable file
   files/<fileId>.meta.json            {fileId,name,size,sha256,etag}
   files/<fileId>.manifest.<chunkSize>.json
