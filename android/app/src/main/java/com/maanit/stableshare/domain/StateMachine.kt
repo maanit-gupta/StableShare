@@ -10,7 +10,7 @@ import com.maanit.stableshare.domain.TransferState.TRANSFERRING
 import com.maanit.stableshare.domain.TransferState.VERIFYING
 
 /**
- * The transfer state table from CLAUDE.md / DESIGN.md §4. Pure: no I/O, no clocks.
+ * The transfer state table from docs/DESIGN.md §4. Pure: no I/O, no clocks.
  * TRANSFERRING/VERIFYING → QUEUED exists only for restart reconciliation and system stops.
  */
 object StateMachine {

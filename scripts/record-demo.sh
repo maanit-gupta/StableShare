@@ -240,7 +240,7 @@ sleep 1
 # ---- 6. network off and on ----------------------------------------------------
 log "6 network off / on"
 adb shell cmd connectivity airplane-mode enable
-wait_for "Waiting for network|You're offline.*" 15  # row label, or the banner when the stop wins the race (PROGRESS.md)
+wait_for "Waiting for network|You're offline.*" 15  # row label, or the banner when the stop wins the race
 hold 4
 adb shell cmd connectivity airplane-mode disable
 wait_for '(Uploading|Downloading)….*|Nothing moving right now' 60

@@ -25,7 +25,7 @@ const BACKOFF_BASE_MS = 1000;
 const BACKOFF_CAP_MS = 30_000;
 const MAX_MISSING_CHUNK_RESYNCS = 2;
 
-// ---------- errors and classification (CLAUDE.md "Error classification") ----------
+// ---------- errors and classification (docs/DESIGN.md §7) ----------
 
 class NetError extends Error {
   constructor(code, message) {

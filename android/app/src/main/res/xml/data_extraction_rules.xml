@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Backup is disabled (allowBackup="false", see CLAUDE.md Decisions): a restored transfer database
+   Backup is disabled (allowBackup="false"): a restored transfer database
    without its part files and URI grants would be inconsistent. These rules exclude every domain
    for Android 12+ cloud backup and device transfer as well.
 -->

@@ -26,7 +26,7 @@ Recorded on the API 37 emulator (`emulator-5554`) running the signed release 1.1
 
 Deviations from the plan's beats:
 - Pause at ~5 %, not ~30 %. The long upload is 200 MB so it is still running in beats 5–6, and pausing early avoids the moment demo-clip finishes and the list shifts.
-- Beat 6 waits for "Waiting for network" or the offline banner. In one rehearsal the row read "Waiting, #1 in line" (QUEUED) while offline instead of "Waiting for network" (logged in PROGRESS.md). The recorded take shows "Waiting for network".
+- Beat 6 waits for "Waiting for network" or the offline banner. In one rehearsal the row read "Waiting, #1 in line" (QUEUED) while offline instead of "Waiting for network". The recorded take shows "Waiting for network".
 - Length: 5 min 39 s, not ~90 s, because of the uiautomator dumps and the readable hold times. The GIF plays at 2×.
 
 ## Re-running

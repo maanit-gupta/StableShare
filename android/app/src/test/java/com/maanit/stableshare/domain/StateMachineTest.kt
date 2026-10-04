@@ -15,7 +15,7 @@ import org.junit.Test
 
 class StateMachineTest {
 
-    // Written out independently of StateMachine, straight from the CLAUDE.md table.
+    // Written out independently of StateMachine, straight from the docs/DESIGN.md §4 table.
     private val expected = setOf(
         QUEUED to TRANSFERRING, QUEUED to PAUSED, QUEUED to CANCELLED,
         TRANSFERRING to VERIFYING, TRANSFERRING to RETRYING, TRANSFERRING to PAUSED,

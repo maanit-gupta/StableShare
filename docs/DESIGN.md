@@ -1,6 +1,6 @@
 # StableShare — Design
 
-This is the source of truth for StableShare's design. The root `CLAUDE.md` holds the short rules, and this document expands on them without contradicting them. If an implementation has to deviate, this file is updated in the same commit and the change is logged under *Decisions* in `CLAUDE.md`.
+This is the source of truth for StableShare's design. If an implementation has to deviate, this file is updated in the same commit.
 
 Contents
 1. [Goals and non-goals](#1-goals-and-non-goals)

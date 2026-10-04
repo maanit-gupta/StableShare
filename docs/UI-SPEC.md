@@ -1,11 +1,11 @@
-# StableShare — UI Specification (Phase 4)
+# StableShare — UI Specification
 
 This document is the single source of truth for every pixel, word and motion in the StableShare app. It sits beside `docs/DESIGN.md` (engine behaviour) and only covers presentation.
 
 ## 0. Rules for implementing this spec
 
 1. Implement exactly what is written. Do not add colours, fonts, screens, copy or animations that are not listed here.
-2. If something you need is not specified, **stop and ask** instead of inventing it. Log the question under "Open issues" in the root `CLAUDE.md`.
+2. If something you need is not specified, **stop and ask** instead of inventing it.
 3. All copy lives in `res/values/strings.xml`, using the exact wording in this document.
 4. The UI never changes transfer state directly. Every action calls the repository or scheduler, and the set of available actions always comes from `StateMachine.allowedActions(state)`.
 5. Light theme only. No dynamic colour. Lock both styles to the tokens below.

@@ -31,7 +31,7 @@ import kotlin.random.Random
 /**
  * Layer A: random operations on [TransferRepository] checked after every step against a small
  * reference model (state, error, backoff and chunk statuses per transfer). The legal-transition
- * table is written out here from CLAUDE.md, independently of StateMachine.
+ * table is written out here from docs/DESIGN.md §4, independently of StateMachine.
  *
  * I1 legal transitions only; an illegal one returns false and changes nothing. I2 terminal rows
  * never change. I3 bytesDone = sum of DONE chunk lengths. I4 markChunkDone succeeds iff

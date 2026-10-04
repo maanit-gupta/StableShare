@@ -10,7 +10,7 @@ import com.maanit.stableshare.domain.TransferState.RETRYING
 import com.maanit.stableshare.domain.TransferState.TRANSFERRING
 import com.maanit.stableshare.domain.TransferState.VERIFYING
 
-/** CLAUDE.md "State machine", copied by hand so the fuzz tests do not trust StateMachine. */
+/** The state machine table (docs/DESIGN.md §4), copied by hand so the fuzz tests do not trust StateMachine. */
 val LEGAL_TRANSITIONS: Map<TransferState, Set<TransferState>> = mapOf(
     QUEUED to setOf(TRANSFERRING, PAUSED, CANCELLED),
     TRANSFERRING to setOf(VERIFYING, RETRYING, PAUSED, FAILED, CANCELLED, QUEUED),
