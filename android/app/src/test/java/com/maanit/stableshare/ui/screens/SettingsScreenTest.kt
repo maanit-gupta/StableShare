@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isOn
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -33,6 +34,10 @@ import com.maanit.stableshare.ui.theme.StableShareTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import androidx.work.Configuration
+import androidx.work.testing.SynchronousExecutor
+import androidx.work.testing.WorkManagerTestInitHelper
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,6 +53,19 @@ class SettingsScreenTest {
 
     private val container = ApplicationProvider.getApplicationContext<StableShareApp>().container
     private val screen = mutableIntStateOf(0)
+
+    /**
+     * Changing "Transfers at the same time" or "Wi-Fi only" makes EngineBootstrap call WorkManager;
+     * without a test instance its default init throws on a background coroutine, which a later
+     * runTest then reports as an uncaught exception (seen as a flaky failure in the full suite).
+     */
+    @Before
+    fun initWorkManager() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(
+            ApplicationProvider.getApplicationContext(),
+            Configuration.Builder().setExecutor(SynchronousExecutor()).build(),
+        )
+    }
 
     private fun showSettings() {
         compose.setContent {
@@ -103,6 +121,30 @@ class SettingsScreenTest {
         segment(3).performScrollTo().assertIsSelected()
         segment(2).assertIsNotSelected()
         assertEquals(3, runBlocking { container.settingsRepository.current().maxConcurrent })
+    }
+
+    @Test
+    fun parallelChunksSegmentedControlPersistsItsValue() {
+        showSettings()
+        fun segment(n: Int) = compose.onNode(hasText(n.toString()) and hasAncestorTag("parallelChunks"))
+        fun selected(n: Int) = compose.onAllNodes(hasText(n.toString()) and hasAncestorTag("parallelChunks") and androidx.compose.ui.test.isSelected())
+
+        compose.waitUntil(5_000) { compose.onAllNodes(hasAncestorTag("parallelChunks")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Pieces at once per transfer").assertExists()
+        compose.onNodeWithText("More pieces at once can be faster on a good connection. Applies to transfers that start after you change it.").assertExists()
+        assertEquals("only 1, 2 and 4", 3, compose.onAllNodes(hasAncestorTag("parallelChunks") and hasClickAction()).fetchSemanticsNodes().size)
+        segment(1).performScrollTo().assertIsSelected()
+        segment(4).assertIsNotSelected()
+
+        segment(4).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(5_000) { selected(4).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(4, runBlocking { container.settingsRepository.current().parallelChunks })
+
+        reopen()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasAncestorTag("parallelChunks")).fetchSemanticsNodes().isNotEmpty() }
+        segment(4).performScrollTo().assertIsSelected()
+        segment(1).assertIsNotSelected()
+        assertEquals(4, runBlocking { container.settingsRepository.current().parallelChunks })
     }
 
     @Test

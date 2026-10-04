@@ -47,6 +47,9 @@ fun conditionOf(state: TransferState, errorCode: ErrorCode?, phase: TransferPhas
     TransferState.CANCELLED -> Condition.CANCELLED
 }
 
+/** A chunk backing off in place: 0-based [index], [attempt] failures so far. */
+data class ChunkBackoff(val index: Int, val attempt: Int)
+
 /** Everything a row or the detail hero shows about one transfer at one moment. */
 data class TransferItem(
     val row: TransferEntity,
@@ -63,11 +66,16 @@ data class TransferItem(
     /** QUEUED: 1-based place in claim order. */
     val queuePosition: Int?,
     val restored: Boolean,
-    val inFlightChunk: Int?,
+    /** Chunks moving right now (several with parallel chunks). */
+    val inFlightChunks: Set<Int> = emptySet(),
+    /** Parallel chunks: the lowest-index chunk backing off while the transfer stays TRANSFERRING. */
+    val chunkBackoff: ChunkBackoff? = null,
     /** The server already had this file (an INSTANT_UPLOAD event): "Already on server" pill. */
     val instant: Boolean = false,
 ) {
     val id: String get() = row.id
+    /** The lowest chunk moving, or null. */
+    val inFlightChunk: Int? get() = inFlightChunks.minOrNull()
     val name: String get() = row.fileName
     val type: TransferType get() = row.type
     val state: TransferState get() = row.state
@@ -116,7 +124,8 @@ data class TransferItem(
                 retryInSeconds = retryIn,
                 queuePosition = queuePosition,
                 restored = restored,
-                inFlightChunk = live?.inFlightChunk,
+                inFlightChunks = live?.let { it.inFlightChunks.keys.ifEmpty { setOfNotNull(it.inFlightChunk) } } ?: emptySet(),
+                chunkBackoff = live?.backoffChunks?.minByOrNull { it.key }?.let { ChunkBackoff(it.key, it.value) },
                 instant = instant,
             )
         }

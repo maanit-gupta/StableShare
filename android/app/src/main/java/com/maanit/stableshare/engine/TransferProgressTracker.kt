@@ -31,6 +31,8 @@ data class LiveProgress(
     val etaSeconds: Long?,
     /** Parallel chunks (DESIGN.md §6.4): bytes moved so far per in-flight chunk index. */
     val inFlightChunks: Map<Int, Long> = emptyMap(),
+    /** Parallel chunks: chunks backing off in place while the transfer stays TRANSFERRING, index → failed attempts so far. */
+    val backoffChunks: Map<Int, Int> = emptyMap(),
 ) {
     /** What the UI shows: committed chunks plus the chunk in flight. */
     val bytes: Long get() = (committedBytes + inFlightBytes).coerceAtMost(totalBytes)
@@ -66,13 +68,13 @@ class TransferProgressTracker(
         if (phase == TransferPhase.Transferring) {
             it.copy(phase = phase)
         } else {
-            it.copy(phase = phase, inFlightChunk = null, inFlightChunks = emptyMap())
+            it.copy(phase = phase, inFlightChunk = null, inFlightChunks = emptyMap(), backoffChunks = emptyMap())
         }
     }
 
     /** A chunk was committed: [committedBytes] is the new bytesDone and nothing is in flight. */
     fun setCommitted(id: String, committedBytes: Long) = modify(id) {
-        it.copy(committedBytes = committedBytes, inFlightBytes = 0, inFlightChunk = null, inFlightChunks = emptyMap())
+        it.copy(committedBytes = committedBytes, inFlightBytes = 0, inFlightChunk = null, inFlightChunks = emptyMap(), backoffChunks = emptyMap())
     }
 
     /**
@@ -87,9 +89,9 @@ class TransferProgressTracker(
         )
     }
 
-    /** Parallel chunks: [bytes] of chunk [chunkIndex] have moved so far; other in-flight chunks are kept. */
+    /** Parallel chunks: [bytes] of chunk [chunkIndex] have moved so far; other in-flight chunks are kept. A backoff of it is over. */
     fun setChunkInFlight(id: String, chunkIndex: Int, bytes: Long) = modify(id) {
-        withChunks(it, it.inFlightChunks + (chunkIndex to bytes))
+        withChunks(it.copy(backoffChunks = it.backoffChunks - chunkIndex), it.inFlightChunks + (chunkIndex to bytes))
     }
 
     /** Parallel chunks: chunk [chunkIndex] stopped moving without being committed (retry, backoff). */
@@ -97,9 +99,14 @@ class TransferProgressTracker(
         withChunks(it, it.inFlightChunks - chunkIndex)
     }
 
+    /** Parallel chunks: chunk [chunkIndex] failed [attempt] times and is backing off in place (the transfer stays TRANSFERRING). */
+    fun chunkBackingOff(id: String, chunkIndex: Int, attempt: Int) = modify(id) {
+        withChunks(it.copy(backoffChunks = it.backoffChunks + (chunkIndex to attempt)), it.inFlightChunks - chunkIndex)
+    }
+
     /** Parallel chunks: chunk [chunkIndex] is DONE and bytesDone is now [committedBytes]; the others keep moving. */
     fun chunkCommitted(id: String, chunkIndex: Int, committedBytes: Long) = modify(id) {
-        withChunks(it.copy(committedBytes = committedBytes), it.inFlightChunks - chunkIndex)
+        withChunks(it.copy(committedBytes = committedBytes, backoffChunks = it.backoffChunks - chunkIndex), it.inFlightChunks - chunkIndex)
     }
 
     private fun withChunks(p: LiveProgress, chunks: Map<Int, Long>) =

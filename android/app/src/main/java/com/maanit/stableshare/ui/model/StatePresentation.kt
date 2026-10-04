@@ -104,7 +104,9 @@ object StatePresentation {
     ): UiText = when (item.condition) {
         Condition.QUEUED -> UiText.res(R.string.stats_queued, item.queuePosition ?: 1, maxConcurrent)
         Condition.PREPARING -> UiText.res(R.string.stats_preparing, item.preparingPercent)
-        Condition.TRANSFERRING -> {
+        Condition.TRANSFERRING -> item.chunkBackoff?.let {
+            UiText.res(R.string.stats_piece_retrying, it.index + 1, it.attempt, maxTries)
+        } ?: run {
             val speed = Format.speed(item.liveSpeed)
             val eta = item.etaSeconds
             if (speed == null || eta == null) UiText.res(R.string.stats_starting)

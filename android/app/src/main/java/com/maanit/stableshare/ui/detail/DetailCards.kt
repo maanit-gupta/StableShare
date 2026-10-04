@@ -125,7 +125,7 @@ fun PiecesCard(ui: DetailUi) {
         CardTitle(stringResource(R.string.pieces_title))
         if (total > 0) {
             Spacer(Modifier.height(12.dp))
-            ChunkMap(ui.chunks, ui.item.inFlightChunk.takeIf { ui.item.state == TransferState.TRANSFERRING }, summary)
+            ChunkMap(ui.chunks, ui.item.inFlightChunks.takeIf { ui.item.state == TransferState.TRANSFERRING }.orEmpty(), summary)
         }
         Spacer(Modifier.height(12.dp))
         Text(summary, style = startBody)
@@ -135,10 +135,10 @@ fun PiecesCard(ui: DetailUi) {
 }
 
 @Composable
-private fun ChunkMap(chunks: List<ChunkEntity>, inFlight: Int?, description: String) {
+private fun ChunkMap(chunks: List<ChunkEntity>, inFlight: Set<Int>, description: String) {
     val c = Mint.colors
     val reduced = LocalReducedMotion.current
-    val pulse = if (inFlight != null && !reduced) {
+    val pulse = if (inFlight.isNotEmpty() && !reduced) {
         rememberInfiniteTransition(label = "cell").animateFloat(0.6f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "cell").value
     } else {
         1f
@@ -164,7 +164,7 @@ private fun ChunkMap(chunks: List<ChunkEntity>, inFlight: Int?, description: Str
                 val size = Size(cellPx, cellPx)
                 val corner = CornerRadius(1.dp.toPx())
                 when {
-                    chunk.index == inFlight -> {
+                    chunk.index in inFlight -> {
                         drawRoundRect(c.accentYellow.copy(alpha = pulse), topLeft, size, corner)
                         drawRoundRect(c.stroke, topLeft + Offset(outline / 2, outline / 2), Size(cellPx - outline, cellPx - outline), corner, style = Stroke(outline))
                     }

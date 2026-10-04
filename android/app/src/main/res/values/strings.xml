@@ -200,6 +200,8 @@
     <string name="settings_connected">Connected</string>
     <string name="settings_couldnt_connect">Couldn\'t connect: %1$s</string>
     <string name="settings_concurrency">Transfers at the same time</string>
+    <string name="settings_parallel_chunks">Pieces at once per transfer</string>
+    <string name="settings_parallel_chunks_helper">More pieces at once can be faster on a good connection. Applies to transfers that start after you change it.</string>
     <string name="settings_piece_size">Piece size for new uploads</string>
     <string name="settings_piece_1">1 MB</string>
     <string name="settings_piece_2">2 MB</string>
@@ -300,6 +302,7 @@
     <string name="stats_preparing">Calculating the file\'s checksum, %1$d%%</string>
     <string name="stats_transferring">%1$s, about %2$s left</string>
     <string name="stats_starting">Starting…</string>
+    <string name="stats_piece_retrying">Piece %1$d is retrying, attempt %2$d of %3$d.</string>
     <string name="stats_verifying">Making sure every byte matches</string>
     <string name="stats_retrying">Attempt %1$d of %2$d. Next try in %3$d s.</string>
     <string name="stats_waiting_network">This continues on its own when you\'re back online.</string>

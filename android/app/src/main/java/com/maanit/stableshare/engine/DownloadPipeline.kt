@@ -151,7 +151,7 @@ class DownloadPipeline(
          */
         private suspend fun fetchChunkInParallel(part: File, chunk: ChunkEntity) {
             val expected = requireNotNull(chunk.sha256)
-            runner.runChunkInPlace(chunk.index, onBackoff = { tracker.dropChunkInFlight(id, chunk.index) }) {
+            runner.runChunkInPlace(chunk.index, onBackoff = { tracker.chunkBackingOff(id, chunk.index, it) }) {
                 val body = api.downloadRange(fileId, chunk.offset, chunk.length, etag) { tracker.setChunkInFlight(id, chunk.index, it) }
                 if (!body.sha256.equals(expected, ignoreCase = true)) {
                     throw ChunkHashMismatchException(chunk.index, expected, body.sha256)

@@ -140,6 +140,16 @@ fun SettingsScreen(
                     modifier = Modifier.testTag("concurrency"),
                 )
                 Spacer(Modifier.height(16.dp))
+                Label(stringResource(R.string.settings_parallel_chunks))
+                SegmentedControl(
+                    options = SettingsRepository.ALLOWED_PARALLEL_CHUNKS,
+                    selected = s.parallelChunks,
+                    label = { it.toString() },
+                    onSelect = { vm.setParallelChunks(it) },
+                    modifier = Modifier.testTag("parallelChunks"),
+                )
+                Text(stringResource(R.string.settings_parallel_chunks_helper), style = Neutral.type.meta)
+                Spacer(Modifier.height(16.dp))
                 Label(stringResource(R.string.settings_piece_size))
                 SegmentedControl(
                     options = SettingsRepository.ALLOWED_CHUNK_SIZES,

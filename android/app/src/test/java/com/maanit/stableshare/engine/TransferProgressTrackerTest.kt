@@ -120,4 +120,32 @@ class TransferProgressTrackerTest {
         assertTrue(p.inFlightChunks.isEmpty())
         assertNull(p.inFlightChunk)
     }
+
+    @Test
+    fun aChunkBackingOffIsRecordedUntilItMovesOrCommits() {
+        tracker.start("t", 0, 10_000)
+        tracker.setChunkInFlight("t", 2, 300)
+        tracker.setChunkInFlight("t", 4, 200)
+
+        tracker.chunkBackingOff("t", 2, attempt = 1)
+        var p = tracker.progress.value.getValue("t")
+        assertEquals(mapOf(2 to 1), p.backoffChunks)
+        assertEquals("the backing-off chunk stops moving", mapOf(4 to 200L), p.inFlightChunks)
+        assertEquals(200, p.inFlightBytes)
+
+        tracker.chunkBackingOff("t", 4, attempt = 3)
+        assertEquals(mapOf(2 to 1, 4 to 3), tracker.progress.value.getValue("t").backoffChunks)
+
+        tracker.setChunkInFlight("t", 2, 10)
+        p = tracker.progress.value.getValue("t")
+        assertEquals("moving again ends the backoff", mapOf(4 to 3), p.backoffChunks)
+        assertEquals(setOf(2), p.inFlightChunks.keys)
+
+        tracker.chunkCommitted("t", 4, committedBytes = 1_000)
+        assertTrue(tracker.progress.value.getValue("t").backoffChunks.isEmpty())
+
+        tracker.chunkBackingOff("t", 2, attempt = 2)
+        tracker.setPhase("t", TransferPhase.Verifying(0))
+        assertTrue("leaving Transferring clears backoffs", tracker.progress.value.getValue("t").backoffChunks.isEmpty())
+    }
 }

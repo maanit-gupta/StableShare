@@ -503,7 +503,7 @@ Below the hero, in a column with 16 dp gaps and 20 dp side margins. Each card: `
 
 **Pieces.** Heading "Pieces". A chunk map drawn on a single `Canvas`:
 - Cells are squares with 2 dp gaps, filling the card width. Cell size = the largest value from 10 dp down to a 4 dp minimum that fits all chunks in at most 12 rows; if even 4 dp needs more rows, the map simply grows taller.
-- Cell colours: DONE `mint.inkPrimary`; PENDING transparent with a 1 dp `mint.bg` outline; FAILED `mint.danger`; in-flight (the chunk currently moving, from the progress tracker) `mint.accentYellow` with a 1 dp `mint.stroke` outline, pulsing alpha 0.6 ↔ 1 over 600 ms.
+- Cell colours: DONE `mint.inkPrimary`; PENDING transparent with a 1 dp `mint.bg` outline; FAILED `mint.danger`; in-flight (every chunk currently moving, from the progress tracker; several at once when "Pieces at once per transfer" is 2 or 4) `mint.accentYellow` with a 1 dp `mint.stroke` outline, pulsing alpha 0.6 ↔ 1 over 600 ms.
 - Summary under the map (`mint.body`): "{done} of {total} pieces done" plus ", {n} failed" when n > 0. Zero-byte files: "This file has no pieces to send."
 - Legend row (`mint.caption`), 8 dp below: 10 dp swatches with labels "Done", "Waiting", "Moving", "Failed".
 - Accessibility: the map is one node described by the summary text.
@@ -543,6 +543,7 @@ Title "Settings" (`neutral.title`). Sections are white cards (16 dp radius, row 
 
 **Transfers**
 - "Transfers at the same time": a segmented control with 1, 2, 3, 4 (44 dp tall, 12 dp radius, selected segment `neutral.inkPrimary` with white text). Applies immediately.
+- "Pieces at once per transfer", directly below it: a segmented control with 1, 2, 4 in the same style (default 1, stored as `parallel_chunks`), helper "More pieces at once can be faster on a good connection. Applies to transfers that start after you change it." (`neutral.meta`).
 - "Piece size for new uploads": segmented 1 MB, 2 MB, 5 MB, with the helper "Applies to uploads you add from now on." (`neutral.meta`).
 - "Retry automatically": a switch (checked track `neutral.inkPrimary`), helper "When off, a failed piece stops the transfer until you tap Retry."
 - "Wi-Fi only", 16 dp below "Retry automatically": a switch styled the same way, helper "Transfers wait for Wi-Fi and won't use mobile data." Stored as `wifiOnly` (default off) and applies at once: turning it on over mobile data stops running transfers (they show "Waiting for Wi-Fi", section 6).
@@ -596,6 +597,7 @@ The ongoing notification shows a determinate progress bar (overall bytes) and up
 | QUEUED while `wifiOnly` is on and `networkState` is not Unmetered | "Waiting for Wi-Fi" | inkSecondary | `neutral.muted` (shows saved progress) | "Waiting for Wi-Fi" | "Wi-Fi only is on. This continues when you connect to Wi-Fi." |
 | TRANSFERRING, phase Preparing | "Preparing, {p}%" (checksum progress) | inkTertiary | `neutral.accent` | "Getting ready..." | "Calculating the file's checksum, {p}%" |
 | TRANSFERRING | "{dir}…" | inkTertiary | `neutral.accent` | "{dir}..." | "{speed}, about {eta} left"; before speed is known: "Starting…" |
+| TRANSFERRING, a piece backing off (parallel pieces only; the lowest such piece) | "{dir}…" | inkTertiary | `neutral.accent` | "{dir}..." | "Piece {n} is retrying, attempt {a} of {max}." ({n} is 1-based; {a} = that piece's failed attempts so far) |
 | VERIFYING | "Verifying…" | inkSecondary | `neutral.accent`, full width, alpha pulsing 0.6 ↔ 1 | "Checking..." | "Making sure every byte matches" |
 | RETRYING (retryable) | "Retrying in {s} s" (counts down) | `neutral.warning` | `neutral.warningFill` | "Trying again..." | "Attempt {a} of {max}. Next try in {s} s." |
 | RETRYING (NETWORK_UNAVAILABLE) | "Waiting for network" | inkSecondary | `neutral.muted` | "Waiting for signal" | "This continues on its own when you're back online." |

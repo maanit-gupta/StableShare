@@ -284,4 +284,29 @@ class StatePresentationTest {
         )
         assertEquals(mapOf("a" to 1, "b" to 2, "c" to 3), TransferItem.queuePositions(rows))
     }
+
+    @Test
+    fun aChunkBackingOffWhileTransferringNamesThePieceAndAttempt() {
+        val backoff = live(TransferPhase.Transferring, speed = 4.1 * mb, eta = 28)
+            .copy(inFlightChunks = mapOf(7 to 0L), backoffChunks = mapOf(9 to 2, 5 to 1))
+        val i = item(row(TransferState.TRANSFERRING), backoff)
+        assertEquals("the lowest index wins", ChunkBackoff(5, 1), i.chunkBackoff)
+        assertEquals("Piece 6 is retrying, attempt 1 of 5.", stats(i))
+        assertEquals("the list label is unchanged", "Uploading…", label(i))
+        assertEquals(Condition.TRANSFERRING, i.condition)
+    }
+
+    @Test
+    fun withoutABackoffTheStatsLineIsSpeedAndEta() {
+        val i = item(row(TransferState.TRANSFERRING), live(TransferPhase.Transferring, speed = 4.1 * mb, eta = 28).copy(inFlightChunks = mapOf(3 to 0L, 4 to 0L)))
+        assertEquals(null, i.chunkBackoff)
+        assertEquals(setOf(3, 4), i.inFlightChunks)
+        assertEquals("4.1 MB/s, about 28 s left", stats(i))
+    }
+
+    @Test
+    fun aBackoffOnlyAppliesWhileTransferring() {
+        val i = item(row(TransferState.VERIFYING), live(TransferPhase.Verifying(0)).copy(backoffChunks = mapOf(1 to 2)))
+        assertEquals("Making sure every byte matches", stats(i))
+    }
 }

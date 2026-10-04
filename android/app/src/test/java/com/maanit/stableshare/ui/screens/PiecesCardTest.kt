@@ -1,6 +1,5 @@
 package com.maanit.stableshare.ui.screens
 
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import com.maanit.stableshare.data.db.ChunkEntity
@@ -17,12 +16,21 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import androidx.compose.ui.graphics.Color
+import android.graphics.Bitmap
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import com.maanit.stableshare.ui.theme.Mint
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 
 /** UI-SPEC §5.8.6: the chunk map summary, which is also the map's accessibility description. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PiecesCardTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun ui(statuses: List<ChunkStatus>, size: Long = statuses.size * 1_000L): DetailUi {
         val row = TransferEntity(
@@ -64,5 +72,33 @@ class PiecesCardTest {
     fun zeroByteFilesHaveNoPieces() {
         compose.setContent { StableShareTheme(reducedMotion = true) { PiecesCard(ui(emptyList(), size = 0)) } }
         compose.onNodeWithText("This file has no pieces to send.").assertExists()
+    }
+
+    @Test
+    fun everyChunkInFlightIsDrawnAsAMovingCell() {
+        val base = ui(listOf(ChunkStatus.DONE, ChunkStatus.PENDING, ChunkStatus.PENDING, ChunkStatus.PENDING))
+        val moving = base.copy(item = base.item.copy(inFlightChunks = setOf(1, 2)))
+        var yellow = Color.Unspecified
+        compose.setContent {
+            StableShareTheme(reducedMotion = true) {
+                yellow = Mint.colors.accentYellow
+                PiecesCard(moving)
+            }
+        }
+        val summary = "1 of 4 pieces done"
+        compose.onNodeWithText(summary).assertExists()
+        // Software-draw the window (captureToImage waits for a hardware redraw Robolectric never makes).
+        val view = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        compose.runOnUiThread { view.draw(android.graphics.Canvas(bitmap)) }
+        val map = compose.onNodeWithContentDescription(summary).fetchSemanticsNode().boundsInWindow
+        // Four chunks fit one row of 10 dp cells with 2 dp gaps; sample each cell's centre.
+        val density = compose.density.density
+        fun centre(i: Int) = Color(bitmap.getPixel((map.left + (i * 12 + 5) * density).toInt(), (map.top + 5 * density).toInt()))
+        assertEquals("chunk 1 moving", yellow, centre(1))
+        assertEquals("chunk 2 moving", yellow, centre(2))
+        assertNotEquals("chunk 0 is done", yellow, centre(0))
+        assertNotEquals("chunk 3 is waiting", yellow, centre(3))
+        compose.onNodeWithText("Moving").assertExists()
     }
 }

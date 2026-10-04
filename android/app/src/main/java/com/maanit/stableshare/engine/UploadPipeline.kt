@@ -208,7 +208,7 @@ class UploadPipeline(
             val sha = runner.runChunkInPlace(
                 index,
                 recover = { outcome -> if (outcome.isAmbiguous && bodySent) confirmedViaStatus(index, sentSha) else null },
-                onBackoff = { tracker.dropChunkInFlight(id, index) },
+                onBackoff = { tracker.chunkBackingOff(id, index, it) },
             ) {
                 bodySent = false
                 val data = files.readChunk(uri, offset, length, t.fileSize, t.sourceLastModified)

@@ -99,6 +99,8 @@ class SettingsViewModel(
 
     fun setMaxConcurrent(n: Int) = viewModelScope.launch { settingsRepo.setMaxConcurrent(n) }
 
+    fun setParallelChunks(n: Int) = viewModelScope.launch { settingsRepo.setParallelChunks(n) }
+
     fun setPieceSize(bytes: Int) = viewModelScope.launch { settingsRepo.setUploadChunkSizeBytes(bytes) }
 
     fun setAutoRetry(enabled: Boolean) = viewModelScope.launch { settingsRepo.setAutoRetryEnabled(enabled) }

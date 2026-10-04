@@ -107,12 +107,12 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
      * the terminal outcomes write state, one worker at a time: Fatal or an exhausted chunk →
      * FAILED, no usable network → RETRYING. Each throws [PipelineSignal.Stop], which cancels the
      * siblings; a worker arriving second finds the row no longer active and only stops.
-     * [onBackoff] runs when a backoff starts (the chunk is no longer moving).
+     * [onBackoff] runs when a backoff starts (the chunk is no longer moving) with the failures so far.
      */
     suspend fun <T> runChunkInPlace(
         index: Int,
         recover: (suspend (Outcome) -> T?)? = null,
-        onBackoff: () -> Unit = {},
+        onBackoff: (failures: Int) -> Unit = {},
         block: suspend () -> T,
     ): T {
         val step = Step.Chunk(index)
@@ -153,7 +153,7 @@ internal class RetryRunner(private val id: String, private val env: PipelineEnv)
                     ) {
                         throw PipelineSignal.Stop("not TRANSFERRING")
                     }
-                    onBackoff()
+                    onBackoff(failures)
                     val blocked = env.network.sleep(delayMs, env.sleep)
                     if (blocked != null) {
                         terminal.withLock { waitForNetwork(blocked, "Network became unusable ($blocked) during a chunk backoff") }
