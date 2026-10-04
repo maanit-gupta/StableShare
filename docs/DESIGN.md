@@ -300,7 +300,7 @@ When faults are enabled, each `/api/*` request draws from one seeded PRNG in a f
 | Fault | Effect |
 |---|---|
 | `latencyMs` ± `latencyJitterMs` | delay before handling |
-| `bandwidthKbps` | throttles chunk request bodies and download bodies (kilobits/s; 0 = unlimited) |
+| `bandwidthKbps` | throttles chunk request bodies and download bodies (kilobits/s; 0 = unlimited). The limit is **per request**: each body gets its own budget from its own start time, so N parallel requests together move up to N × the limit. Parallel-chunk benchmarks against it therefore overstate the gain on one real link. |
 | `errorRate` | `503 INJECTED_FAULT` before any processing |
 | `timeoutRate` | request accepted, never answered |
 | `dropMidBodyRate` | socket destroyed partway through the request body (chunk PUT) or the response body (downloads and JSON) |
@@ -512,7 +512,9 @@ Every metadata write follows the same sequence: write `*.tmp`, fsync the file, `
   - the ETA
 
   The UI shows `bytesDone + inFlight`. A job's entry is cleared when the job ends.
-- On the server, a per-upload async mutex serialises `meta.json` updates and `complete`. Chunk bodies stream into unique temp files *outside* the lock, so concurrent PUTs of different chunks do not block each other.
+- On the server, a per-upload async mutex (`KeyedLock`, keyed by uploadId) serialises `meta.json` updates and `complete`. Chunk bodies stream into unique temp files *outside* the lock, so concurrent PUTs of different chunks do not block each other. Inside the lock a PUT re-reads `meta.json`, renames its temp file to `chunks/<index>.bin`, fsyncs the directory and writes `meta.json` atomically, so parallel chunks of one transfer cannot lose each other's records.
+  - *Why a mutex rather than deriving the received set from `chunks/`:* the mutex already existed for `complete` and create, and `meta.json` stays the single record of each chunk's hash, which duplicate detection (`already_received` vs `409 CHUNK_CONFLICT`) and `complete` need. Deriving the set from the directory would mean re-hashing chunk files or storing hashes elsewhere. The lock is held only for a rename and a small JSON write, so it does not serialise the transfer of bytes.
+  - `test/concurrency.test.js` proves it: 8 chunks at once, 6 concurrent duplicates of one chunk, status polling during concurrent uploads, and 16 concurrent chunks with `dropAfterProcessRate` 0.5 (seed 42). With the lock bypassed, all four fail.
 
 ### 6.5 Pause, resume, cancel
 User intents go through `TransferController`; the UI never writes state.
