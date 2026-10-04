@@ -4,6 +4,7 @@
 # Each line of the results file: preset, direction, size, N, run, milliseconds.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+mkdir -p build
 OUT=${1:-build/benchmark-parallel.tsv}
 SERVER=${SERVER:-http://localhost:8080}
 RUNS=${RUNS:-3}
