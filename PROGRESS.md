@@ -1,4 +1,4 @@
-NEXT STEP: C
+NEXT STEP: D
 # StableShare — Progress
 
 Updated by Claude Code at the end of every session. Keep this file under 120 lines: when "Gotchas" grows past 15 lines, merge related items.
@@ -40,7 +40,13 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 ### Final phases (`plan/FINAL-PHASES.md`)
 - [x] A Scope reset (2026-10-04: UIDT kept since it is in the code; changed PROGRESS.md, CLAUDE.md Decisions, README.md:373 force-stop now pauses; DESIGN §9 already accurate)
 - [x] B Release build — 1.1.0 (versionCode 2), release/StableShare-1.1.0.apk, 3 807 237 bytes, v2-signed; 350 unit tests green; sha256 in release/CHECKSUMS.txt
-- [ ] C Real-device test [USER + Claude]
+- [x] C Real-device test (2026-10-04, OnePlus CPH2717, Android 16/API 36, release 1.1.0 over LAN `http://192.168.1.2:8080`, no rebuild: cleartext already allowed, server URL is a setting)
+  - PASS fresh install: splash + onboarding, permissions granted; PASS Test connection (user-reported)
+  - PASS upload: DEMO_EDITED.mp4 112 MB and maanit-presentation.mov 155 MB COMPLETED, server-verified
+  - PASS kill mid-upload: `am crash` (pid 7086 → 12766, exit reason APP CRASH) → resumed on its own, 1 deduped chunk, Restored after restart, Verified
+  - PASS instant re-upload: server `instantUploads: 2` (presentation.mov, Backgroud_1.mp4), "Already on server" shown
+  - PASS pause/resume (user-reported only, not observable from the host)
+  - PARTIAL download: only sample-0B.bin (0 B) downloaded on the device; the 200 MB download was not run on the phone (verified on the emulator in Phase 3/6.4c). Known limitation for the README.
 - [ ] D Screenshots (minimal)
 - [ ] D2 Demo video
 - [ ] E1 README sections 1–6
@@ -69,6 +75,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 ## Gotchas (short, durable facts that save re-discovery)
 
 - UIDT (6.4b): `TransferScheduler.ensureRunning(userInitiated)` + extension `ensureRunning()` = background start. `AppContainer.scheduler` is now `HostSelectingScheduler` (WorkManagerScheduler is private and does the wake-ups). Stop kinds live in the engine (`StopKind`, `TransferEngine.run(stopReason, stopKind)`); `TransferJobHost` maps JobParameters stop reasons and is the test seam. Deviation forced by the state machine: a user stop moves VERIFYING → QUEUED (no PAUSED edge). Job id 1 000 001; WorkManager's JobScheduler id range is now 0–999 999 (lint SpecifyJobSchedulerIdRange). Notification ids: 1001 WorkManager FGS, 1002 UIDT job. To verify in 6.4c: JobScheduler's NETWORK_TYPE_ANY may require a validated network, unlike our ConnectivityChecker (LAN-only server). `lintDebug` already had 3 errors before 6.4b (TransferCoordinatorWorker getStopReason, TransferRow LocalContext); not in CI. Baseline: 343 Android JVM tests.
+- Real device (C): `am kill` does nothing while the transfer FGS runs and a release build has no `run-as`; `adb shell am crash com.maanit.stableshare` kills it with exit reason APP CRASH (not a user stop), so it is restored, not paused.
 - User stop (6.4c): `PreviousProcessExit` (engine/) reads ApplicationExitInfo once per process; `TransferEngine(previousExitByUser)` applies it on the process's first run only; `reconcileAfterProcessStart(stoppedByUser)`. A paused-on-restart row logs only STATE_CHANGE "app stopped by the user" (no INFO, not Restored). `adb shell am force-stop` also records REASON_USER_REQUESTED, so it now pauses too; chaos/kill tests must use `kill -9` (root shell: `adb root` works on google_apis images, `run-as … kill` failed on API 33). README.md:373 ("Force stop … resume on the next launch") is now wrong: fix in Phase 9 (now PAUSED). 7.1's fallback `am kill` was not checked for its exit reason; prefer `adb root` + `kill -9`. AVD `Pixel_API33` (google_apis arm64, API 33) exists. Baseline: 350 Android JVM tests.
 - UIDT verified on the emulator (6.4c): dumpsys shows `JOB #u0aNNN/1000001 … TransferJobService`, `Flags: 20`, `Priority: 500 [MAX]`, `userInitiatedApproved: true (started as UIJ: true)`. JobScheduler turns NETWORK_TYPE_ANY into INTERNET&VALIDATED, so a LAN-only (unvalidated) network will not start the job; the emulator's Wi-Fi validates. Throttle the server for manual stop tests (`PUT /admin/faults {"enabled":true,"bandwidthKbps":4000}`, then reset) or a 200 MB upload finishes in about 40 s. Task Manager = expand quick settings (`cmd statusbar expand-settings`), then tap "1 app is active".
 
