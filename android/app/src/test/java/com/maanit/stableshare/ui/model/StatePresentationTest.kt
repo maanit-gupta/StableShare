@@ -167,6 +167,16 @@ class StatePresentationTest {
     }
 
     @Test
+    fun meteredNetworkErrorCopy() {
+        // UI-SPEC §7.
+        assertEquals("Waiting for Wi-Fi", ErrorCopy.short(ErrorCode.METERED_NETWORK, 5).resolve(res))
+        assertEquals(
+            "Wi-Fi only is on, so this continues when you connect to Wi-Fi. You can change this in Settings.",
+            ErrorCopy.long(ErrorCode.METERED_NETWORK, 5).resolve(res),
+        )
+    }
+
+    @Test
     fun queuedWhileWifiOnlyHoldsItBack() {
         val i = TransferItem.build(row(TransferState.QUEUED), null, queuePosition = 2, restored = false, now = now, wifiGated = true)
         assertEquals(Condition.QUEUED_WIFI, i.condition)

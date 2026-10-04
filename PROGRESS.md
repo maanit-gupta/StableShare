@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.1b Wi-Fi only: UI, copy and docs** (`plan/6a-wifi-only.md`). Like 6.1a, it most likely shipped already (commits 90dd329, 2eda46b): diff the plan against the code and UI-SPEC first.
+Next step: **6.2a Instant upload: server** (`plan/6b-instant-upload.md`).
 Before it (user, optional): push `phase-5-safety-net`, confirm CI is green with the fuzz tests, and run Actions → "Chaos test" once.
 
 ## Checklist
@@ -20,7 +20,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 
 ### Phase 6 — Features
 - [x] 6.1a Wi-Fi only: engine and tests (`plan/6a-wifi-only.md`) (2026-10-04: already shipped in d7f485c; every behaviour and tests (a)–(i) present in WifiOnlyTest, NetworkGuardTest, ErrorClassifierTest, WakeupPlanTest, WorkManagerSchedulerTest; DESIGN §7/§9 cover it; 285 JVM tests green; no code change)
-- [ ] 6.1b Wi-Fi only: UI, copy and docs
+- [x] 6.1b Wi-Fi only: UI, copy and docs (2026-10-04: already shipped in 90dd329/2eda46b; all copy in strings.xml + UI-SPEC §5.4/5.10/6/7/8; only gap was a §7 METERED_NETWORK copy test, added; 286 JVM tests green; manual check = the Feature 1 emulator run recorded in CLAUDE.md, not repeated)
 - [ ] 6.2a Instant upload: server (`plan/6b-instant-upload.md`)
 - [ ] 6.2b Instant upload: client and UI
 - [ ] 6.3a Parallel chunks: server safety (`plan/6c-parallel-chunks.md`)
@@ -63,7 +63,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - JDK: Gradle daemon toolchain is pinned to 25 (`android/gradle/gradle-daemon-jvm.properties`); CI uses temurin 25. Node LTS used in CI: 24.
 - Job-level `env:` cannot use the `runner` context (GitHub rejects the file and logs a 0 s failed run on every push); put `${{ runner.* }}` in step env. Lint with actionlint (download script → scratchpad).
 - Action majors (checked 2026-10-04): checkout@v7, setup-node@v7, setup-java@v6, gradle/actions/setup-gradle@v6, upload-artifact@v7.
-- Clean clone builds without local.properties when ANDROID_HOME is set (runners set it); debug build needs no keystore. Baseline: 32 server tests, 285 Android JVM tests (after 5.2).
+- Clean clone builds without local.properties when ANDROID_HOME is set (runners set it); debug build needs no keystore. Baseline: 32 server tests, 286 Android JVM tests (after 6.1b).
 - Fuzz: `./gradlew :app:testDebugUnitTest --tests '*fuzz*' -Pfuzz.seeds=2000` (repo ≈ 66 s, engine ≈ 51 s; default 200 ≈ 12 s). Replay: `-Pfuzz.seed=S`. Regression seeds in `app/src/test/resources/fuzz-regressions.txt` (`<layer> <seed>`). Changing the scenario generator reshuffles seeds: re-find a reproducing seed for each regression entry (revert the fix, search with a large `fuzz.seeds`).
 - Engine fuzz is deterministic: Room uses `setQueryCoroutineContext(testDispatcher)` and FileStore gets the same dispatcher (EngineHarness `io`). Process death = the old process's clock throws (every repository write needs it), then its scope is cancelled. I11 counts pipelines and TRANSFERRING+VERIFYING rows; RETRYING rows with a persisted backoff from a dead process hold no slot by design, so they are not counted.
 - Bug found by fuzzing (engine seed 1346): RETRY_SCHEDULED logged after a concurrent cancel → fixed with `TransferRepository.logEventWhile`.
