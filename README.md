@@ -22,7 +22,11 @@ StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads 
 |---|---|---|---|
 | ![Transfers](docs/screenshots/05-transfers-active.png) | ![Detail](docs/screenshots/07-detail-transferring.png) | ![History](docs/screenshots/11-history.png) | ![Settings](docs/screenshots/12-settings.png) |
 
-**Download:** tap the icon or the button above, or this link: [StableShare-1.2.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk) from the [v1.2.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.2.0) (3 807 321 bytes, v2-signed; also in [release/](release/StableShare-1.2.0.apk)), SHA-256 `6569424a726472a76cc954300992a4f6f0382b2a0ab2bb95596a4845af95b0af` ([CHECKSUMS.txt](release/CHECKSUMS.txt)). The previous [1.1.0 APK](release/StableShare-1.1.0.apk) is kept; it defaults to the local server.
+**Demo video:** [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4) (5:39; queued transfers, pause, `kill -9` and restore, lost responses, airplane mode, instant re-upload, cancel, History). See [Demo](#demo) for the 2× GIF.
+
+<a href="docs/demo/stableshare-demo.mp4"><img src="docs/demo/stableshare-demo-thumb.jpg" width="200" alt="StableShare demo video thumbnail: two uploads in progress. Tap to play the recording"></a>
+
+**Download:** tap the icon or the button above, or this link: [StableShare-1.2.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk) from the [v1.2.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.2.0) (3 807 321 bytes, v2-signed), SHA-256 `6569424a726472a76cc954300992a4f6f0382b2a0ab2bb95596a4845af95b0af` ([CHECKSUMS.txt](release/CHECKSUMS.txt)). The same APK is in the repository at [release/StableShare-1.2.0.apk](release/StableShare-1.2.0.apk), so you can download it from there before the v1.2.0 release is published. The previous [1.1.0 APK](release/StableShare-1.1.0.apk) is kept; it defaults to the local server.
 
 **Install on a phone:** open the link on the Android device, then open the downloaded file. Android asks you to allow installs from your browser or file manager the first time. The app connects to the hosted server by default; nothing needs to be set (see [Quick start](#quick-start)).
 
