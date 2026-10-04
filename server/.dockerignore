@@ -1,0 +1,9 @@
+node_modules
+storage
+test
+.env
+.env.*
+*.log
+Dockerfile
+.dockerignore
+fly.toml
