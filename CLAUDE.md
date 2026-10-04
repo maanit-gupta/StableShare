@@ -69,7 +69,7 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - [x] Phase 1 — DESIGN.md + mock server + CLI client (2026-10-03: 32 server tests green, chaos test passing)
 - [x] Phase 2 — Android foundation (data/domain layer) (2026-10-03: 112 JVM unit tests green; health() verified from the API 37 emulator; branch phase-2-android-foundation)
 - [x] Phase 3 — Transfer engine (2026-10-03: 163 JVM unit tests green; emulator chaos run with kill -9 → both 200 MB transfers COMPLETED, hashes match; branch phase-3-transfer-engine)
-- [ ] Phase 4 — UI, README, release APK
+- [x] Phase 4 — UI, README, release APK (2026-10-04: release 1.1.0 published as GitHub release v1.1.0; README rewritten per plan/FINAL-PHASES.md E)
 - [x] Feature 1 — Wi-Fi only (2026-10-04: 282 JVM unit tests green; emulator `svc wifi disable/enable` ×3 during a 200 MB upload: apiRequests flat on mobile data, upload resumed and verified; branch feature-1-wifi-only)
 
 ## Decisions (append: date — decision — why)
@@ -129,10 +129,12 @@ Up to N transfers at once (1–4, default 2), enforced by a single TransferCoord
 - 2026-10-04 — UIDT 6.4c: Task Manager "Stop" (and Force stop) kills the process without onStopJob (exit REASON_USER_REQUESTED, verified on API 37), so reconciliation used to resume the transfer on the next open. User decision: the first coordinator run of a process reads `PreviousProcessExit` (ApplicationExitInfo, API 30+) and on a user stop moves TRANSFERRING → PAUSED, VERIFYING → QUEUED (no PAUSED edge); DESIGN §9. JobScheduler maps NETWORK_TYPE_ANY to INTERNET&VALIDATED, so a UIDT job needs a validated network.
 - 2026-10-04 — Scope reset: shipping path = phases A–F in plan/FINAL-PHASES.md (resilience report, full screenshot set, design notes deferred). The UIDT host stays: it was built and verified in 6.4 (user decision), so UIDT + WorkManager remain the two hosts.
 
+- 2026-10-04 — README rewritten for 1.1.0; the UIDT host is listed as an extra (plan E said "no UIDT" / "not implemented", but step A kept it in the code). Release = tag v1.1.0 on main (fast-forwarded from phase-5-safety-net).
+
 ## Open issues (append; remove when resolved)
 - Server disk-full (507) is mapped in the error handler but has no automated test (needs a size-limited filesystem). Android DISK_FULL is tested.
 - Crash between finalizePart and setLocalUri re-downloads the file (the verified copy is left orphaned); a cancel whose cleanup is cut short by process death leaves a server session (expires in 24 h) or a local file.
 - REMOTE_FILE_CHANGED manual retry reuses the stored ETag and fails again; UI-SPEC's copy tells the user to cancel and download again (no "download again" action in the spec).
 - After kill -9, resumption took ~18 s on API 37 and 54–80 s on API 33 (pre-6.4 build: 55 s, once not within 300 s) (WorkManager stops its stale run on restart; the 15 s backstop wake-up / reschedule restarts it). Generated test files are never deleted.
-- Signed release/StableShare-1.1.0.apk built (step B, 2026-10-04); still open: release smoke test (onboarding, 200 MB up + down with Flaky Wi-Fi, kill -9 on Pixel_9_root, Restored pill, both Verified) and the final report remain.
+- Release 1.1.0 smoke-tested on a phone (step C) except the 200 MB download, which was verified on emulators only.
 - Wi-Fi only: the classifier is shared, so a user-started request (e.g. Settings → Test connection) that fails on mobile data with Wi-Fi only on reads "Couldn't connect: Waiting for Wi-Fi". Up to one request can start on mobile data in the instant before the network callback reports the switch (seen once in three emulator cycles).
