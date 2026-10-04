@@ -18,6 +18,7 @@ import com.maanit.stableshare.engine.GuardedTransferApi
 import com.maanit.stableshare.engine.NetworkGuard
 import com.maanit.stableshare.engine.PipelineEnv
 import com.maanit.stableshare.engine.RestoredTransfers
+import com.maanit.stableshare.engine.RunLease
 import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferEngine
 import com.maanit.stableshare.engine.TransferProgressTracker
@@ -108,6 +109,9 @@ class AppContainer(context: Context) {
         )
     }
 
+    /** One coordinator loop per process, whichever host (worker or job) starts it (DESIGN.md §9). */
+    val runLease = RunLease()
+
     val transferEngine: TransferEngine by lazy {
         TransferEngine(
             repo = transferRepository,
@@ -118,6 +122,7 @@ class AppContainer(context: Context) {
             tracker = progressTracker,
             wakeups = scheduler,
             restored = restoredTransfers,
+            lease = runLease,
         )
     }
 

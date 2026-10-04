@@ -132,6 +132,10 @@ class EngineHarness(
     /** What the pipelines talk to: the fake server behind the network guard. */
     val pipelineApi = GuardedTransferApi(server, guard)
     val ensureRunningCalls = CopyOnWriteArrayList<Long>()
+    val lease = RunLease()
+
+    /** Called on the loop's thread whenever the engine schedules a wake-up (it is exiting then). */
+    @Volatile var onWakeup: (WakeupPlan?) -> Unit = {}
     val env = PipelineEnv(
         repo = repo,
         classifier = ErrorClassifier(net),
@@ -149,8 +153,9 @@ class EngineHarness(
         upload = UploadPipeline(pipelineApi, files, env),
         download = DownloadPipeline(pipelineApi, files, env),
         tracker = tracker,
-        wakeups = { wakeups += it },
+        wakeups = { wakeups += it; onWakeup(it) },
         clock = clock,
+        lease = lease,
     )
     val scheduler = TransferScheduler { ensureRunningCalls += clock() }
     val controller = TransferController(repo, server, files, { this.settings.value }, scheduler, engine)

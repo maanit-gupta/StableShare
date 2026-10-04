@@ -29,8 +29,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.job
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
@@ -54,7 +52,8 @@ data class CoordinatorStatus(
  * The coordinator (DESIGN.md §6): runs at most `maxConcurrent` pipelines at once, reacting to
  * database, settings and connectivity changes (no polling), and claims nothing while the network
  * is unusable (offline, or metered with Wi-Fi only on). It never writes COMPLETED; only a
- * pipeline's verification step does (rule 3). One [run] at a time per process.
+ * pipeline's verification step does (rule 3). [run] is the loop every host calls; [lease] keeps
+ * it to one loop per process.
  */
 class TransferEngine(
     private val repo: TransferRepository,
@@ -66,8 +65,8 @@ class TransferEngine(
     private val wakeups: WakeupScheduler,
     private val clock: () -> Long = System::currentTimeMillis,
     private val restored: RestoredTransfers = RestoredTransfers(),
+    private val lease: RunLease = RunLease(),
 ) {
-    private val runLock = Mutex()
     private val accepting = AtomicBoolean(false)
     private val jobs = ConcurrentHashMap<String, Job>()
     private val active = MutableStateFlow<Set<String>>(emptySet())
@@ -105,11 +104,16 @@ class TransferEngine(
         }.distinctUntilChanged()
 
     /**
-     * One coordinator run. Returns when nothing is running or QUEUED (after scheduling a wake-up
-     * for rows that wait on a backoff or the network). If cancelled — WorkManager stopped the
-     * worker — the running transfers go back to QUEUED (an interruption, not a failure).
+     * One coordinator run for a host. Returns when nothing is running or QUEUED (after scheduling a
+     * wake-up for rows that wait on a backoff or the network). If cancelled — the system stopped
+     * the host — the running transfers go back to QUEUED (an interruption, not a failure).
+     *
+     * Returns false at once, without running, when another host holds the [lease]; that host runs
+     * the loop again before it lets go, so new rows are still picked up.
      */
-    suspend fun run(stopReason: () -> String = { "cancelled" }) = runLock.withLock {
+    suspend fun run(stopReason: () -> String = { "cancelled" }): Boolean = lease.runOrHandOff { runLoop(stopReason) }
+
+    private suspend fun runLoop(stopReason: () -> String) {
         accepting.set(true)
         try {
             coroutineScope { coordinate() }
