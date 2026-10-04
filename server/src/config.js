@@ -24,6 +24,12 @@ export function loadConfig(env = process.env) {
     storageDir: path.resolve(serverRoot, env.STORAGE_DIR ?? './storage'),
     defaultChunkSize: Number(env.DEFAULT_CHUNK_SIZE ?? 2 * MiB),
     sessionTtlMs: Number(env.SESSION_TTL_MS ?? SESSION_TTL_MS),
+    maxFileSize: Number(env.MAX_UPLOAD_BYTES ?? LIMITS.maxFileSize),
+    // Hosted-only switches; unset means off, so a local run behaves as before.
+    completedTtlMs: Number(env.COMPLETED_UPLOAD_TTL_MS ?? 0),
+    faultAutoResetMs: Number(env.FAULT_AUTO_RESET_MS ?? 0),
+    seedOnStart: env.SEED_ON_START === '1',
+    disableFileMutate: env.DISABLE_FILE_MUTATE === '1',
     logRequests: env.LOG_REQUESTS !== '0',
   };
 }

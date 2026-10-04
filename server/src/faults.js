@@ -71,6 +71,10 @@ export class FaultInjector {
     return this.config;
   }
 
+  isDefault() {
+    return Object.keys(DEFAULT_FAULTS).every((key) => this.config[key] === DEFAULT_FAULTS[key]);
+  }
+
   update(partial) {
     if (partial === null || typeof partial !== 'object' || Array.isArray(partial)) {
       throw new ApiError(400, 'INVALID_REQUEST', 'Fault config must be a JSON object');

@@ -2,7 +2,7 @@
 // Fast (hardware AES) and identical on every machine, so hashes are reproducible.
 import fsp from 'node:fs/promises';
 import crypto from 'node:crypto';
-import { atomicWriteJson, fsyncDir, readJson, tmpName } from './storage.js';
+import { atomicWriteJson, fsyncDir, readJson, sha256File, tmpName } from './storage.js';
 import { MiB, GiB } from './config.js';
 
 export const SEED_FILES = Object.freeze([
@@ -53,4 +53,19 @@ export async function writeSeededFile(paths, fileId, size, name = `${fileId}.bin
   const meta = { fileId, name, size, sha256, etag: etagFor(sha256) };
   await atomicWriteJson(paths.fileMeta(fileId), meta);
   return { created: true, meta };
+}
+
+// Boot-time seeding (SEED_ON_START=1): keeps each seed file only if its size and sha256 still match
+// its meta, otherwise drops the meta (so downloads 404 instead of serving bad bytes) and rewrites it.
+export async function ensureSeedFiles(paths, log = console.log) {
+  for (const { fileId, size } of SEED_FILES) {
+    const meta = await readJson(paths.fileMeta(fileId)).catch(() => null);
+    const st = await fsp.stat(paths.fileBin(fileId)).catch(() => null);
+    const ok = meta?.size === size && st?.size === size && (await sha256File(paths.fileBin(fileId))) === meta.sha256;
+    if (ok) continue;
+    await fsp.rm(paths.fileMeta(fileId), { force: true });
+    const t0 = Date.now();
+    await writeSeededFile(paths, fileId, size);
+    log(`[seed] ${fileId} ${meta ? 'did not verify, rewritten' : 'created'} in ${Date.now() - t0} ms`);
+  }
 }

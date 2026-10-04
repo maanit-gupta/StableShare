@@ -66,7 +66,7 @@ export function validateChunkSize(value) {
   return value;
 }
 
-function validateCreate(body) {
+function validateCreate(body, maxFileSize) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     throw new ApiError(400, 'INVALID_REQUEST', 'Body must be a JSON object {fileName, fileSize, chunkSize, sha256}');
   }
@@ -77,8 +77,8 @@ function validateCreate(body) {
   if (!Number.isSafeInteger(fileSize) || fileSize < 0) {
     throw new ApiError(400, 'INVALID_REQUEST', 'fileSize must be a non-negative integer');
   }
-  if (fileSize > LIMITS.maxFileSize) {
-    throw new ApiError(413, 'FILE_TOO_LARGE', `fileSize exceeds the ${LIMITS.maxFileSize}-byte limit`);
+  if (fileSize > maxFileSize) {
+    throw new ApiError(413, 'FILE_TOO_LARGE', `fileSize exceeds the ${maxFileSize}-byte limit`);
   }
   validateChunkSize(chunkSize);
   if (typeof sha256 !== 'string' || !SHA256_RE.test(sha256)) {
@@ -164,7 +164,7 @@ export function uploadsRouter(ctx) {
   // Create session (idempotent).
   router.put('/:uploadId', json, async (req, res) => {
     const id = parseId(req);
-    const params = validateCreate(req.body);
+    const params = validateCreate(req.body, ctx.maxFileSize);
     const { status, meta } = await locks.run(id, async () => {
       const existing = await readJson(paths.uploadMeta(id));
       if (existing) {
@@ -369,9 +369,11 @@ export function uploadsRouter(ctx) {
   return router;
 }
 
-// Removes non-completed sessions idle for longer than the TTL, and stale temp files.
+// Removes non-completed sessions idle for longer than the TTL, and stale temp files. With
+// completedTtlMs > 0 (hosted only), also removes completed uploads older than that, plus their
+// hash-index entry, so a public server's disk does not fill up. Seed files are never touched.
 export async function sweepUploads(ctx, now = Date.now()) {
-  const { paths, locks, sessionTtlMs } = ctx;
+  const { paths, locks, sessionTtlMs, completedTtlMs } = ctx;
   let removed = 0;
   const ids = await fsp.readdir(paths.uploads).catch(() => []);
   for (const id of ids) {
@@ -392,11 +394,35 @@ export async function sweepUploads(ctx, now = Date.now()) {
         removed++;
         return;
       }
+      if (meta.state === 'COMPLETED' && completedTtlMs > 0 && now - (meta.completedAt ?? meta.updatedAt) > completedTtlMs) {
+        await removeCompleted(ctx, id, meta);
+        removed++;
+        return;
+      }
       await removeStaleTmp(paths.chunksDir(id), now);
     });
   }
   await removeStaleTmp(paths.completed, now);
   return { removed };
+}
+
+// Caller holds the upload's lock. The index entry goes first (under its own lock) so no instant
+// upload can link from a file that is about to disappear; it is kept if it points at another upload.
+async function removeCompleted(ctx, id, meta) {
+  const { paths, locks } = ctx;
+  const file = paths.completedFile(id);
+  const sha256 = meta.result?.sha256;
+  if (sha256) {
+    await locks.run(indexLockKey(sha256), async () => {
+      const entry = await readJson(paths.indexEntry(sha256)).catch(() => null);
+      if (entry && path.resolve(paths.root, entry.path) === file) {
+        await fsp.rm(paths.indexEntry(sha256), { force: true });
+        await fsyncDir(paths.index);
+      }
+    });
+  }
+  await fsp.rm(file, { force: true });
+  await fsp.rm(paths.uploadDir(id), { recursive: true, force: true });
 }
 
 async function removeStaleTmp(dir, now) {

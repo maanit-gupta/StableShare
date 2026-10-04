@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import express from 'express';
-import { MiB, SESSION_TTL_MS } from './config.js';
+import { LIMITS, MiB, SESSION_TTL_MS } from './config.js';
 import { errorHandler } from './errors.js';
 import { FaultInjector } from './faults.js';
 import { KeyedLock } from './locks.js';
@@ -16,6 +16,9 @@ export function createApp({
   storageDir,
   defaultChunkSize = 2 * MiB,
   sessionTtlMs = SESSION_TTL_MS,
+  maxFileSize = LIMITS.maxFileSize,
+  completedTtlMs = 0,
+  disableFileMutate = false,
   logRequests = false,
 } = {}) {
   if (!storageDir) throw new Error('storageDir is required');
@@ -28,6 +31,10 @@ export function createApp({
     faults: new FaultInjector(),
     defaultChunkSize,
     sessionTtlMs,
+    maxFileSize,
+    completedTtlMs,
+    disableFileMutate,
+    lastAdminAt: Date.now(),
   };
   ctx.sweep = (now) => sweepUploads(ctx, now);
 
