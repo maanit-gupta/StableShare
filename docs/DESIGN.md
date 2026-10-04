@@ -504,11 +504,16 @@ Every metadata write follows the same sequence: write `*.tmp`, fsync the file, `
 `doWork()` calls `setForeground` with an ongoing, silent, low-importance notification on channel `"transfers"` (UI-SPEC §5.12): "Moving {n} file(s)" where n is the larger of the running pipelines and the queued-plus-active rows, "{percent}% overall, {speed}" and a determinate bar of the aggregate progress (DB `bytesDone` plus in-flight bytes). It is refreshed at most once a second, and tapping it opens Transfers. Completion and failure notifications go to a second channel, `"results"`, posted by `TransferResultNotifier` when this process sees a row move into COMPLETED or FAILED (the first emission after process start is only a baseline); tapping one opens that transfer's detail screen. The type is `FOREGROUND_SERVICE_TYPE_DATA_SYNC`, with the manifest declaring FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC and POST_NOTIFICATIONS, plus WorkManager's `SystemForegroundService` with `foregroundServiceType="dataSync"` (`tools:node="merge"`). If the platform refuses the foreground start (background-start restrictions on Android 12+, for example when WorkManager re-runs the coordinator after a restart), the refusal is logged and the work runs anyway; `ForegroundPromoter` retries the promotion at most every 10 s, which succeeds as soon as the app is in the foreground (Phase 4 fix: previously the run stayed without a notification). Without the notification permission the notification is simply not shown.
 
 ### 6.4 Inside a transfer
-- Chunks are **sequential**. This keeps the write-ordering argument simple and bounds memory to one chunk buffer per transfer.
+- **Parallel chunks.** The setting `parallelChunks` (1, 2 or 4; default 1; DataStore key `parallel_chunks`) is read once when a job starts and is fixed for that job. The global limit of concurrent transfers still applies, so at most `maxConcurrent × parallelChunks` chunk requests are in flight.
+  - **N = 1** is the original sequential loop, unchanged: one chunk buffer per transfer, and per-chunk backoff goes through RETRYING (§7).
+  - **N > 1** (`forEachChunkInParallel`): the not-yet-DONE chunks are dispatched in index order inside one `coroutineScope`, with a `Semaphore(N)`. A worker takes its permit **before** it reads the chunk (upload) or fetches it (download), and keeps it until the chunk is DONE or has failed, so memory is bounded by N chunk buffers. Each worker runs read → hash → PUT → DONE (upload) or fetch → hash check → positional write + fsync → DONE (download). The download writers share no file handle: each write opens the `.part` file, writes at the chunk's own offset and fsyncs, so writers never overlap and rule 2 holds per chunk.
+  - The first worker to throw (a terminal outcome, `SessionLost`, a lost CAS) cancels its siblings and their OkHttp calls. In-flight siblings are never marked DONE; chunks already DONE stay DONE. Pause, cancel and a system stop cancel the job, which reaches every worker. Cleanup stays in `NonCancellable` in `TransferController` and never writes state.
+  - Verification starts only after every worker has finished and every chunk is DONE.
+  - Retries and terminal outcomes for N > 1 are described in §7.
 - **Live progress** lives only in memory, in `TransferProgressTracker`. It holds:
   - the phase: Preparing, Transferring, Verifying, Waiting for network, or Retrying at *t*
-  - in-flight bytes from OkHttp's body progress, and the index of the chunk currently moving (cleared on commit and whenever the phase leaves Transferring; the detail screen's chunk map highlights it)
-  - speed, as an EMA with a time constant of ≈ 3 s
+  - in-flight bytes from OkHttp's body progress, per in-flight chunk index (`inFlightChunks`); the in-flight total is their sum, and `inFlightChunk` is the lowest index moving (the detail screen's chunk map highlights it). A committed chunk leaves the map alone (`chunkCommitted`); leaving the Transferring phase clears it
+  - speed, as an EMA with a time constant of ≈ 3 s, over the total of committed plus all in-flight bytes
   - the ETA
 
   The UI shows `bytesDone + inFlight`. A job's entry is cleared when the job ends.
@@ -538,7 +543,7 @@ OkHttp has `retryOnConnectionFailure = false`, so every retry is a deliberate de
 
 | Class | Triggers | Action |
 |---|---|---|
-| **RETRYABLE** | socket/read/connect timeout, connection reset or EOF mid-body, HTTP 5xx (except 507), 429, chunk-hash mismatch on a download (data corrupted in transit), 422 `CHUNK_HASH_MISMATCH` on upload (body corrupted in transit) | `TRANSFERRING → RETRYING`, backoff, retry. Consumes one attempt for that chunk. |
+| **RETRYABLE** | socket/read/connect timeout, connection reset or EOF mid-body, HTTP 5xx (except 507), 429, chunk-hash mismatch on a download (data corrupted in transit), 422 `CHUNK_HASH_MISMATCH` on upload (body corrupted in transit) | `TRANSFERRING → RETRYING`, backoff, retry. Consumes one attempt for that chunk. With parallel chunks (N > 1) a chunk backs off in place and the transfer stays TRANSFERRING (see *Parallel chunks* below). |
 | **WAITING** | the network may not be used: none with INTERNET (`NETWORK_UNAVAILABLE`), or metered while Wi-Fi only is on (`METERED_NETWORK`); detected after a transport failure, or by the network guard below | `→ RETRYING` with that code and no `nextRetryAt`. **No attempt consumed.** Resumes when `usableNetwork` turns true (or the WorkManager `CONNECTED` / `UNMETERED` constraint). |
 | **FATAL** | 404 `SESSION_NOT_FOUND`/`FILE_NOT_FOUND`; 409 `SESSION_CONFLICT`/`CHUNK_CONFLICT`/`SESSION_COMPLETED`; 413; 416; 200 instead of 206 (remote changed); source size/mtime/hash changed or source missing; the same chunk failing its hash 5 times; `FILE_HASH_MISMATCH`; local disk full (`ENOSPC`) or 507 | `→ FAILED` with `errorCode` and `errorMessage`. Manual retry is possible (keeps progress). |
 
@@ -598,10 +603,15 @@ delay(attempt) = random_uniform(0, min(30 s, 1 s × 2^(attempt−1)))
 3. It CASes `RETRYING → TRANSFERRING` and retries the same step. A lost CAS (paused or cancelled meanwhile) ends the job silently.
 4. VERIFYING steps (`complete`, local hash) restart the pipeline from the top after the backoff instead (GET status, then `complete` again).
 
+**Parallel chunks (N > 1, `RetryRunner.runChunkInPlace`).** With several chunks in flight, the transfer **stays TRANSFERRING** during a chunk's backoff: `markChunkDone` writes only while TRANSFERRING (rule 5), so leaving that state would drop the siblings' valid completions.
+1. A retryable chunk failure marks the chunk FAILED, increments its persisted `chunks.attempts`, logs RETRY_SCHEDULED (only while TRANSFERRING) and backs off in place (the same `RetryPolicy` and network-guarded sleep). The siblings keep going. Each chunk has its own budget of 5.
+2. Terminal outcomes go through one per-run mutex, so exactly one worker writes state: Fatal, or a chunk whose 5th attempt fails (`RETRIES_EXHAUSTED`), or automatic retry turned off → `FAILED`; no usable network (after a transport failure, or the guard ending a backoff) → one `RETRYING NETWORK_UNAVAILABLE / METERED_NETWORK` with no attempt consumed. Each ends the job and cancels the siblings; a worker arriving second finds the row no longer active and only stops.
+3. Transfer-level RETRYING with a `nextRetryAt` is used only by non-chunk steps (create, status, `complete`, local hash), which run outside the worker pool exactly as for N = 1.
+
 WaitForNetwork moves the row to `RETRYING NETWORK_UNAVAILABLE` or `RETRYING METERED_NETWORK` with `nextRetryAt = null` and **ends the job**, which frees the slot. On a false → true edge of `usableNetwork` (a NetworkCallback combined with the Wi-Fi only setting), the coordinator and a process-level collector promote such rows to QUEUED (only RETRYING rows move, so PAUSED and CANCELLED never do), and the collector calls `ensureRunning()`.
 
 **No infinite loops.** Every loop in the engine is bounded:
-- *Chunk retry loop:* each turn consumes one persisted attempt, up to 5, or ends the job (WaitForNetwork, FAILED, lost CAS).
+- *Chunk retry loop:* each turn consumes one persisted attempt, up to 5, or ends the job (WaitForNetwork, FAILED, lost CAS). With N > 1 the same holds per worker, and the first terminal outcome ends all of them.
 - *Non-chunk step retries:* at most 5 per pipeline run.
 - *Pipeline restarts:*
   - Upload `MISSING_CHUNKS`: at most 2 re-syncs, then `FAILED SESSION_CONFLICT`.
@@ -625,6 +635,7 @@ Every failure therefore ends in success, a consumed attempt, an external signal,
 2. If the index is in `receivedChunks`, the chunk is marked DONE and a `CHUNK_CONFIRMED_AFTER_LOST_RESPONSE` event is logged. No attempt is consumed. If the status call itself fails, the original error is handled normally.
 3. Otherwise the client resends.
 4. A resend of a chunk that did land anyway (a race) is harmless. The server answers `200 already_received` without rewriting, after checking that the hash is the same.
+5. With parallel chunks (N > 1) the check is per chunk: the worker whose response was lost asks GET status for its own index while its siblings keep sending. The server's per-upload lock (§6.4) keeps the status list consistent with concurrent PUTs.
 
 **Complete.**
 1. When the `complete` call fails ambiguously, the client calls GET status. If the session is `COMPLETED`, the client compares `sha256` with its own hash and goes `VERIFYING → COMPLETED`.
@@ -666,12 +677,12 @@ Every failure therefore ends in success, a consumed attempt, an external signal,
   - If the remote file changed, the server returns `200` with the full body instead of `206`. The client treats that as `FAILED REMOTE_FILE_CHANGED` and does not consume the body.
   - A manifest re-fetched on resume with a different etag is also `REMOTE_FILE_CHANGED`.
 - **Corrupted-partial recovery (downloads).** Recovery has three layers:
-  1. **Tail check on resume.** The last 2 DONE chunks are re-hashed from the `.part` file, and a mismatch goes back to PENDING. These are the chunks a crash or a lost fsync could have torn. Re-hashing all of a 1 GiB file on every resume would cost too much.
+  1. **Tail check on resume.** The 2 × N DONE chunks with the highest indices are re-hashed from the `.part` file (N = `parallelChunks`, so 2 when sequential), and a mismatch goes back to PENDING. These are the chunks a crash or a lost fsync could have torn: with N writers, up to N were being written at once. Re-hashing all of a 1 GiB file on every resume would cost too much.
   2. **Full-file check.** Anything older (external tampering, bit rot) is caught by the full-file hash in VERIFYING. On a mismatch, every chunk is re-hashed on disk and only the bad ones are reset. The row then goes `VERIFYING → RETRYING (FILE_HASH_MISMATCH, due now) → TRANSFERRING`, which keeps the state machine unchanged, and only those chunks are fetched again. A second consecutive mismatch, or a mismatch that no chunk explains, is `FAILED FILE_HASH_MISMATCH`.
   3. **Missing or resized part file.** A `.part` file that is missing or the wrong size resets all chunks and is recreated, after a free-space check (`FAILED DISK_FULL` if there is not enough room).
 - **Download write order and finalisation.**
   1. The chunk hash is checked against the manifest **before** the write.
-  2. `writeChunkAt` fsyncs, and only then is the chunk marked DONE.
+  2. `writeChunkAt` fsyncs, and only then is the chunk marked DONE. With parallel chunks each worker follows this order for its own chunk; writes go to disjoint offsets.
   3. After the full-file hash matches, `finalizePart` renames the file without overwriting ("name (1).ext" on a collision).
   4. `localUri` is updated to the final file, a VERIFIED event is logged, and then `VERIFYING → COMPLETED`.
 
