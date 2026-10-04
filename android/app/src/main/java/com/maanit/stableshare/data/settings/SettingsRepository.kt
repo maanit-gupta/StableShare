@@ -84,7 +84,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     }
 
     companion object {
-        const val DEFAULT_SERVER_URL = "http://10.0.2.2:8080"
+        const val DEFAULT_SERVER_URL = "https://stableshare.onrender.com"
         const val MIN_CONCURRENT = 1
         const val MAX_CONCURRENT = 4
         const val DEFAULT_MAX_CONCURRENT = 2

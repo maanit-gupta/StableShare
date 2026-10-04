@@ -65,7 +65,7 @@ class ProtocolClientTest {
         val ok = ProtocolClient.buildOkHttp()
         assertFalse(ok.retryOnConnectionFailure)
         assertEquals(10_000, ok.connectTimeoutMillis)
-        assertEquals(30_000, ok.readTimeoutMillis)
+        assertEquals(60_000, ok.readTimeoutMillis)
         assertEquals(30_000, ok.writeTimeoutMillis)
     }
 

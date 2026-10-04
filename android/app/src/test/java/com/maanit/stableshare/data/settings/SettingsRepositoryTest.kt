@@ -44,7 +44,7 @@ class SettingsRepositoryTest {
 
     @Test
     fun defaults() = runBlocking {
-        assertEquals(Settings("http://10.0.2.2:8080", 2, 2 * mib, true, onboardingCompleted = false), repo.current())
+        assertEquals(Settings("https://stableshare.onrender.com", 2, 2 * mib, true, onboardingCompleted = false), repo.current())
     }
 
     @Test

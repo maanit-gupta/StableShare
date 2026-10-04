@@ -262,7 +262,7 @@ class ProtocolClient(
         /** We own retries (rule 6): OkHttp never silently retries a request. */
         fun buildOkHttp(idleKeepAliveMs: Long = IDLE_KEEP_ALIVE_MS): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(false)
             .connectionPool(ConnectionPool(5, idleKeepAliveMs, TimeUnit.MILLISECONDS))

@@ -194,7 +194,7 @@
     <string name="settings_section_about">About</string>
     <string name="settings_server_address">Server address</string>
     <string name="settings_server_invalid">Enter a full address, like http://10.0.2.2:8080</string>
-    <string name="settings_server_helper">Use http://10.0.2.2:8080 on the emulator. On a phone, use your computer\'s address on the same Wi-Fi.</string>
+    <string name="settings_server_helper">Default is the hosted server, https://stableshare.onrender.com. For a local server, use http://10.0.2.2:8080 on the emulator, or your computer\'s address on the same Wi-Fi on a phone.</string>
     <string name="settings_test_connection">Test connection</string>
     <string name="settings_checking">Checking…</string>
     <string name="settings_connected">Connected</string>
