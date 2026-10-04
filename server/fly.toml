@@ -1,0 +1,40 @@
+# Fly.io config for the hosted StableShare server. Deploy from server/: `fly deploy`.
+# The app name is global on Fly; change it here if it is taken when the app is created.
+app = "stableshare"
+primary_region = "bom"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  STORAGE_DIR = "/data"
+  MAX_UPLOAD_BYTES = "536870912"         # 512 MiB
+  SESSION_TTL_MS = "172800000"           # incomplete sessions: 48 h
+  COMPLETED_UPLOAD_TTL_MS = "86400000"   # completed uploads: 24 h
+  SEED_ON_START = "1"
+  FAULT_AUTO_RESET_MS = "1800000"        # 30 min without an /admin call
+  DISABLE_FILE_MUTATE = "1"
+
+[[mounts]]
+  source = "stableshare_data"
+  destination = "/data"
+  initial_size = "5gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
