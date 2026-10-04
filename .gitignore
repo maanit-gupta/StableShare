@@ -1,10 +1,59 @@
-node_modules/
-build/
+# StableShare root .gitignore. android/.gitignore and android/app/.gitignore add Android Studio defaults.
+
+# --- Android / Gradle --------------------------------------------------------
 .gradle/
+build/
 local.properties
-*.jks
-keystore.properties
-server/storage/
-.DS_Store
+captures/
+.cxx/
+.externalNativeBuild/
+*.iml
+.idea/
+# Built packages: only the shipped release APK is committed.
 *.apk
-!release/*.apk
+*.aab
+!release/StableShare-1.1.0.apk
+
+# --- Node / server -----------------------------------------------------------
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.*
+!.env.example
+
+# --- Files the server and tools create while running -------------------------
+# Mock server data (STORAGE_DIR, default server/storage): seeded files, upload sessions, completed uploads.
+server/storage/
+# CLI client resume state next to the file being transferred.
+*.stableshare-upload.json
+*.stableshare-download.json
+*.part
+# Demo recording output (scripts/record-demo.sh writes to the current directory).
+/demo.mp4
+*.log
+
+# --- OS / editor -------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+*.tmp
+*.bak
+*.swp
+__pycache__/
+
+# --- AI tooling and private planning notes ----------------------------------
+CLAUDE.md
+.claude/
+MASTER-PLAN.md
+PROGRESS.md
+plan/
+
+# --- Secrets: signing keys and service credentials ---------------------------
+keystore.properties
+*.keystore
+*.jks
+*.pem
+google-services.json
