@@ -1,4 +1,4 @@
-# StableShare mock server image (used by fly.toml). Storage lives on a volume mounted at /data.
+# StableShare mock server image (used by render.yaml). Storage lives at /data.
 FROM node:24-bookworm-slim
 
 ENV NODE_ENV=production

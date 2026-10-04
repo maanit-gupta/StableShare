@@ -1,0 +1,30 @@
+# Render Blueprint for the hosted StableShare server (free web service, no persistent disk).
+# Storage is ephemeral: it is wiped on every deploy, restart and idle spin-down, and the seed files
+# are rewritten at boot (SEED_ON_START). Render sets PORT itself; the server reads it.
+services:
+  - type: web
+    name: stableshare
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: hosted-server
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    healthCheckPath: /health
+    envVars:
+      - key: STORAGE_DIR
+        value: /data
+      - key: MAX_UPLOAD_BYTES
+        value: "536870912"       # 512 MiB
+      - key: SESSION_TTL_MS
+        value: "172800000"       # incomplete sessions: 48 h
+      - key: COMPLETED_UPLOAD_TTL_MS
+        value: "86400000"        # completed uploads: 24 h
+      - key: SEED_ON_START
+        value: "1"
+      - key: SEED_MAX_BYTES
+        value: "209715200"       # 200 MiB: skips sample-500MB and sample-1GB
+      - key: FAULT_AUTO_RESET_MS
+        value: "1800000"         # 30 min without an /admin call
+      - key: DISABLE_FILE_MUTATE
+        value: "1"
