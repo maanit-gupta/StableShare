@@ -57,8 +57,10 @@ export async function writeSeededFile(paths, fileId, size, name = `${fileId}.bin
 
 // Boot-time seeding (SEED_ON_START=1): keeps each seed file only if its size and sha256 still match
 // its meta, otherwise drops the meta (so downloads 404 instead of serving bad bytes) and rewrites it.
-export async function ensureSeedFiles(paths, log = console.log) {
+// maxBytes > 0 (SEED_MAX_BYTES) skips larger seed files so a hosted cold start finishes quickly.
+export async function ensureSeedFiles(paths, log = console.log, maxBytes = 0) {
   for (const { fileId, size } of SEED_FILES) {
+    if (maxBytes > 0 && size > maxBytes) continue;
     const meta = await readJson(paths.fileMeta(fileId)).catch(() => null);
     const st = await fsp.stat(paths.fileBin(fileId)).catch(() => null);
     const ok = meta?.size === size && st?.size === size && (await sha256File(paths.fileBin(fileId))) === meta.sha256;

@@ -29,6 +29,7 @@ export function loadConfig(env = process.env) {
     completedTtlMs: Number(env.COMPLETED_UPLOAD_TTL_MS ?? 0),
     faultAutoResetMs: Number(env.FAULT_AUTO_RESET_MS ?? 0),
     seedOnStart: env.SEED_ON_START === '1',
+    seedMaxBytes: Number(env.SEED_MAX_BYTES ?? 0),
     disableFileMutate: env.DISABLE_FILE_MUTATE === '1',
     logRequests: env.LOG_REQUESTS !== '0',
   };

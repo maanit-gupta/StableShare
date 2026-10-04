@@ -29,7 +29,7 @@ const server = app.listen(config.port, config.host, (err) => {
   sweep();
   // After listen, so /health answers while large seed files are verified or written.
   if (config.seedOnStart) {
-    ensureSeedFiles(ctx.paths)
+    ensureSeedFiles(ctx.paths, console.log, config.seedMaxBytes)
       .then(() => console.log('[seed] seed files ready'))
       .catch((err) => console.error('[seed] failed', err));
   }
