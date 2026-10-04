@@ -1,3 +1,4 @@
+NEXT STEP: B
 # StableShare — Progress
 
 Updated by Claude Code at the end of every session. Keep this file under 120 lines: when "Gotchas" grows past 15 lines, merge related items.
@@ -6,8 +7,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **7.1 Resilience report** (`plan/7-evidence.md`).
-Still open for the user: parallel-chunks default and the other 6.3c questions. Optional: push `phase-5-safety-net` and confirm CI is green.
+Scope reset: shipping path = A–F in `plan/FINAL-PHASES.md` (replaces plan files 6d, 7, 8, 9, 10). Next step: see the top line.
+Still open for the user: parallel-chunks default and the other 6.3c questions.
 
 ## Checklist
 
@@ -30,27 +31,22 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 6.4b UIDT: TransferJobService, scheduling, stop mapping (2026-10-04: ea099a0 code, 7fbcbb3 docs; 343 JVM tests green, fuzz 2000 green; `HostSelectingSchedulerTest`, `TransferJobHostTest`, pauseAll + notification action tests; no emulator run yet, that is 6.4c)
 - [x] 6.4c UIDT: emulator verification and docs (2026-10-04: b2aa451 user-stop pause, 38c6fca + this commit docs; 350 JVM tests green, fuzz 2000 green. API 37: UIJ in dumpsys, listed in Active apps, Task Manager Stop at 66/100 → PAUSED and stayed paused 60 s after reopening, resumed from the app → COMPLETED, server-verified 8d91e2aa…1710, 100 CHUNK_DONE. API 33 (new AVD Pixel_API33): WorkManager host only (SystemJobService + FGS 1001, no UIJ), kill -9 ×3 → reconciled and resumed, COMPLETED, verified a9b19920…dd97)
 
-### Phase 7 — Evidence
-- [ ] 7.1 Resilience report (`plan/7-evidence.md`)
+### Deferred (time)
+- 6.4 UIDT job: NOT deferred after all; 6.4a–c were already built and verified (see above), user kept it at step A (2026-10-04)
+- 7.1 Resilience report: deferred (time)
+- 8.2 Full screenshot set: deferred (time); minimal set in step D
+- 10.4 Design notes: deferred (time)
 
-### Phase 8 — Final build
-- [ ] 8.1 Release build and smoke test [ASK] (`plan/8-final-build.md`)
-- [ ] 8.2 Screenshots
-
-### Phase 9 — README
-- [ ] 9.1 Sections 1–4: summary, requirements map, quick start, Architecture (`plan/9-readme.md`)
-- [ ] 9.2 Transfer protocol and Persistence strategy
-- [ ] 9.3 Retry and recovery logic, integrity, lifecycle, concurrency
-- [ ] 9.4 Important edge cases handled, UI, testing, limitations, structure
-- [ ] 9.5 Accuracy audit
-
-### Phase 10 — Showcase
-- [ ] 10.1 Demo script (`plan/10-showcase.md`)
-- [ ] 10.2u [USER] record the demo
-- [ ] 10.3 Embed the demo and write the changelog
-- [ ] 10.4u [USER] write the design notes in your own words
-- [ ] 10.5u [USER] GitHub release
-- [ ] 10.6 Submission audit
+### Final phases (`plan/FINAL-PHASES.md`)
+- [x] A Scope reset (2026-10-04: UIDT kept since it is in the code; changed PROGRESS.md, CLAUDE.md Decisions, README.md:373 force-stop now pauses; DESIGN §9 already accurate)
+- [ ] B Release build [ASK]
+- [ ] C Real-device test [USER + Claude]
+- [ ] D Screenshots (minimal)
+- [ ] D2 Demo video
+- [ ] E1 README sections 1–6
+- [ ] E2 README sections 7–12 + final checks
+- [ ] F1 Push and release, items 1–3
+- [ ] F2 Push and release, items 4–5
 
 ## Open questions
 
