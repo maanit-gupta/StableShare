@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[?]` blocked on a ques
 
 ## Resume here
 
-Next step: **6.4b UIDT: TransferJobService, scheduling, stop mapping** (`plan/6d-uidt.md`). The 6.4b questions below are answered; follow those answers.
+Next step: **6.4c UIDT: emulator verification and docs** (`plan/6d-uidt.md`). Check on the emulator that a UIDT job really starts on a LAN-only/emulator network (see the 6.4b gotcha on NETWORK_TYPE_ANY).
 Still open for the user: parallel-chunks default and the other 6.3c questions. Optional: push `phase-5-safety-net` and confirm CI is green.
 
 ## Checklist
@@ -27,7 +27,7 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - [x] 6.3b Parallel chunks: engine [APPROVE] (2026-10-04: 4bfe6ff, 2587b46 + docs; 319 JVM tests green incl. 16 in `engine/ParallelChunksTest`; fuzz 2000 seeds green with N ∈ {1,2,4}; seed 1346 re-checked)
 - [x] 6.3c Parallel chunks: UI and benchmark (2026-10-04: c5b6918 UI, 90be639 test de-flake, c258804/0b68c71/0e57920 benchmark harness, cd598d7 docs; 325 JVM tests green ×2; benchmark on Pixel_9_root API 37, table in docs/benchmarks.md)
 - [x] 6.4a UIDT: read docs, plan, extract TransferRunLoop [APPROVE] (`plan/6d-uidt.md`) (2026-10-04: approved variant = no new class, `TransferEngine.run` already is the loop; `RunLease` single-flight with rerun flag, 93c2c77; latent claim race fixed, 242f74e; 329 JVM tests green, fuzz 2000 green; DESIGN §9 "Hosts and the run lease")
-- [ ] 6.4b UIDT: TransferJobService, scheduling, stop mapping
+- [x] 6.4b UIDT: TransferJobService, scheduling, stop mapping (2026-10-04: see the commits below; 343 JVM tests green, fuzz 2000 green; `HostSelectingSchedulerTest`, `TransferJobHostTest`, pauseAll + notification action tests; no emulator run yet, that is 6.4c)
 - [ ] 6.4c UIDT: emulator verification and docs
 
 ### Phase 7 — Evidence
@@ -67,6 +67,8 @@ Phases 1–4 (server, Android foundation, engine, UI, release 1.0.0): `[x]` done
 - 6.4b: A UIDT host that finds the WorkManager loop holding the lease returns at once, so those transfers keep running under the dataSync FGS. Acceptable, or should the job host wait for the lease? ANSWER (user, 2026-10-04): fine as built.
 
 ## Gotchas (short, durable facts that save re-discovery)
+
+- UIDT (6.4b): `TransferScheduler.ensureRunning(userInitiated)` + extension `ensureRunning()` = background start. `AppContainer.scheduler` is now `HostSelectingScheduler` (WorkManagerScheduler is private and does the wake-ups). Stop kinds live in the engine (`StopKind`, `TransferEngine.run(stopReason, stopKind)`); `TransferJobHost` maps JobParameters stop reasons and is the test seam. Deviation forced by the state machine: a user stop moves VERIFYING → QUEUED (no PAUSED edge). Job id 1 000 001; WorkManager's JobScheduler id range is now 0–999 999 (lint SpecifyJobSchedulerIdRange). Notification ids: 1001 WorkManager FGS, 1002 UIDT job. To verify in 6.4c: JobScheduler's NETWORK_TYPE_ANY may require a validated network, unlike our ConnectivityChecker (LAN-only server). `lintDebug` already had 3 errors before 6.4b (TransferCoordinatorWorker getStopReason, TransferRow LocalContext); not in CI. Baseline: 343 Android JVM tests.
 
 - The plan arrived in `StableShare-masterplan/`; moved to the repo root (MASTER-PLAN.md, PROGRESS.md, plan/, .claude/commands/next.md). Work is on branch `phase-5-safety-net`, cut from `feature-1-wifi-only`; local `main` is 8 commits behind it.
 - Wi-Fi only already shipped before this plan (CLAUDE.md "Feature 1", commits d7f485c, 90dd329, 2eda46b). At 6.1a/6.1b, diff the plan against the existing code before building anything. Code vs plan 6a: DataStore key is `wifi_only` (not `wifiOnly`); the proactive stop is per request (NetworkGuard/GuardedTransferApi), not a job-level watcher; promotion lives in EngineBootstrap (`promoteWaitingForNetwork`) and the coordinator.
