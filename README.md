@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk">
+  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.3.0/StableShare-1.3.0.apk">
     <img src="docs/design/mascot/previews/launcher_icon.png" width="128" alt="StableShare app icon. Tap to download the APK">
   </a>
 </p>
@@ -7,11 +7,11 @@
 <h1 align="center">StableShare</h1>
 
 <p align="center">
-  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk">
-    <img src="https://img.shields.io/badge/Download_APK-v1.2.0-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Download StableShare APK v1.2.0">
+  <a href="https://github.com/maanit-gupta/StableShare/releases/download/v1.3.0/StableShare-1.3.0.apk">
+    <img src="https://img.shields.io/badge/Download_APK-v1.3.0-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Download StableShare APK v1.3.0">
   </a>
   <br>
-  <sub>Android 8.0+ · 3.8 MB · signed release · <a href="https://github.com/maanit-gupta/StableShare/releases/tag/v1.2.0">release notes</a></sub>
+  <sub>Android 8.0+ · 4.0 MB · signed release · <a href="https://github.com/maanit-gupta/StableShare/releases/tag/v1.3.0">release notes</a></sub>
   <br><br>
   <a href="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml"><img src="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
@@ -22,11 +22,15 @@ StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads 
 |---|---|---|---|
 | ![Transfers](docs/screenshots/05-transfers-active.png) | ![Detail](docs/screenshots/07-detail-transferring.png) | ![History](docs/screenshots/11-history.png) | ![Settings](docs/screenshots/12-settings.png) |
 
-**Demo video:** [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4) (5:39; queued transfers, pause, `kill -9` and restore, lost responses, airplane mode, instant re-upload, cancel, History). See [Demo](#demo) for the 2× GIF.
+| First launch | Try a demo |
+|---|---|
+| ![First launch: choose Hosted or Local server](docs/screenshots/01-server-choice.png) | ![Try a demo sheet](docs/screenshots/02-try-a-demo.png) |
 
-<a href="docs/demo/stableshare-demo.mp4"><img src="docs/demo/stableshare-demo-thumb.jpg" width="200" alt="StableShare demo video thumbnail: two uploads in progress. Tap to play the recording"></a>
+**Demo video:** [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4) (3:54; first launch and server choice, Try a demo, an upload and a download on the hosted server, expand a row, pause and resume, History filters and row menu, switch to the local server). See [Demo](#demo) for the 2× GIF.
 
-**Download:** tap the icon or the button above, or this link: [StableShare-1.2.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.2.0/StableShare-1.2.0.apk) from the [v1.2.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.2.0) (3 807 321 bytes, v2-signed), SHA-256 `6569424a726472a76cc954300992a4f6f0382b2a0ab2bb95596a4845af95b0af` ([CHECKSUMS.txt](release/CHECKSUMS.txt)). The same APK is in the repository at [release/StableShare-1.2.0.apk](release/StableShare-1.2.0.apk), so you can download it from there before the v1.2.0 release is published. The previous [1.1.0 APK](release/StableShare-1.1.0.apk) is kept; it defaults to the local server.
+<a href="docs/demo/stableshare-demo.mp4"><img src="docs/demo/stableshare-demo-thumb.jpg" width="200" alt="StableShare demo video thumbnail: an upload and a download in progress. Tap to play the recording"></a>
+
+**Download:** tap the icon or the button above, or this link: [StableShare-1.3.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.3.0/StableShare-1.3.0.apk) from the [v1.3.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.3.0) (3 963 781 bytes, v2-signed), SHA-256 `4f5d31be439fb8d05724eb4e8831a63e68b84ae590764c2e96f597785afd1687` ([CHECKSUMS.txt](release/CHECKSUMS.txt)). The same APK is in the repository at [release/StableShare-1.3.0.apk](release/StableShare-1.3.0.apk). The previous [1.2.0](release/StableShare-1.2.0.apk) and [1.1.0](release/StableShare-1.1.0.apk) APKs are kept; 1.1.0 defaults to the local server.
 
 **Install on a phone:** open the link on the Android device, then open the downloaded file. Android asks you to allow installs from your browser or file manager the first time. The app connects to the hosted server by default; nothing needs to be set (see [Quick start](#quick-start)).
 
@@ -34,9 +38,9 @@ The full design is in [docs/DESIGN.md](docs/DESIGN.md) and the UI spec is in [do
 
 ## Demo
 
-![StableShare demo: three queued transfers, pause, kill -9 and restore, lost responses, airplane mode, instant re-upload, cancel, History](docs/demo/stableshare-demo.gif)
+![StableShare demo: first launch and server choice, Try a demo, an upload and a download, pause and resume, History, switching to the local server](docs/demo/stableshare-demo.gif)
 
-The GIF plays at 2× speed. The full 5:39 recording at normal speed is [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4). It was recorded on an API 37 emulator with the release build and driven by adb ([docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) lists the beats).
+The GIF plays at 2× speed. The full 3:54 recording at normal speed is [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4). It was recorded on an API 37 emulator with the 1.3.0 release build against the hosted server and driven by adb ([scripts/record-demo-1.3.sh](scripts/record-demo-1.3.sh), which also takes the screenshots above). The fault-injection walkthrough from 1.2.0 (`kill -9` and restore, lost responses, airplane mode, instant re-upload, cancel) is described in [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) and can be re-recorded with [scripts/record-demo.sh](scripts/record-demo.sh).
 
 ## Features
 
@@ -76,9 +80,15 @@ The GIF plays at 2× speed. The full 5:39 recording at normal speed is [docs/dem
 
 ## Quick start
 
+Settings → Server has two choices. **Hosted** is ready to use with nothing to set up: the app talks to https://stableshare.onrender.com, the default ([SettingsRepository.kt](android/app/src/main/java/com/maanit/stableshare/data/settings/SettingsRepository.kt)). The free instance sleeps when idle, so the first request after a quiet spell can take up to a minute while the status pill on Transfers shows **Waking**.
+
+**Local server** runs the same server on your computer. Pick **Emulator** or **Phone on Wi-Fi**, enter your computer's address and port if needed, then tap **Test connection**. Switching servers pauses active transfers; they resume when you switch back.
+
+**Try a demo:** tap **Try a demo** on the empty Transfers screen or in Settings → Demo to start a quick upload, a big upload or a sample download without picking a file.
+
 ### 1. Hosted server (default)
 
-Install the APK; it connects to the hosted server at https://stableshare.onrender.com by default ([SettingsRepository.kt](android/app/src/main/java/com/maanit/stableshare/data/settings/SettingsRepository.kt)). Open Settings → Server address → **Test connection** to check it. The free instance spins down when idle, so the first request after a quiet spell is slow while it wakes. See [Hosted server](#hosted-server).
+Install the APK; it connects to the hosted server by default. See [Hosted server](#hosted-server) for how it is configured.
 
 ### 2. Local server (fallback)
 
@@ -90,9 +100,9 @@ npm run seed   # sample-0B, sample-odd (3 MiB + 123 B), sample-50MB, sample-200M
 npm run dev    # http://0.0.0.0:8080; settings are env vars, see server/.env.example
 ```
 
-**App:** the signed APK is [release/StableShare-1.2.0.apk](release/StableShare-1.2.0.apk); install it with `adb install -r release/StableShare-1.2.0.apk`. To build from source (JDK 25 toolchain, Android SDK), run `./gradlew assembleDebug` in `android/`. `./gradlew assembleRelease` signs only when `android/keystore.properties` exists; that file and the keystore are not in the repository.
+**App:** the signed APK is [release/StableShare-1.3.0.apk](release/StableShare-1.3.0.apk); install it with `adb install -r release/StableShare-1.3.0.apk`. To build from source (JDK 25 toolchain, Android SDK), run `./gradlew assembleDebug` in `android/`. `./gradlew assembleRelease` signs only when `android/keystore.properties` exists; that file and the keystore are not in the repository.
 
-**Server address** (Settings → Server address, then **Test connection**):
+**Server address** (Settings → Server → **Local server**, then **Test connection**):
 - **Emulator:** `http://10.0.2.2:8080` reaches the host machine.
 - **Phone:** your computer's LAN IP, for example `http://192.168.1.2:8080`, with both devices on the same Wi-Fi. Cleartext HTTP is allowed by [network_security_config.xml](android/app/src/main/res/xml/network_security_config.xml).
 - **Android 17+** needs the local-network permission, which onboarding asks for. Without it, traffic to private addresses times out silently.
@@ -354,7 +364,7 @@ StableShare/
 ├── README.md, CHANGELOG.md, .gitignore
 ├── .github/workflows/      ci.yml (tests on push/PR), chaos.yml (manual)
 ├── docs/                   DESIGN.md, UI-SPEC.md, benchmarks.md, DEMO-SCRIPT.md, demo/, screenshots/, design/mascot/
-├── release/                StableShare-1.1.0.apk, StableShare-1.2.0.apk, CHECKSUMS.txt
+├── release/                StableShare-1.1.0.apk, StableShare-1.2.0.apk, StableShare-1.3.0.apk, CHECKSUMS.txt
 ├── scripts/                demo recording helpers
 ├── server/
 │   ├── src/                app.js, server.js, routes/ (uploads, files, admin), faults.js, storage.js, locks.js

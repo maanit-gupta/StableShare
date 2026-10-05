@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.0 (versionCode 4), 2026-10-05
+
+APK: `release/StableShare-1.3.0.apk`, 3 963 781 bytes, v2-signed, SHA-256 `4f5d31be439fb8d05724eb4e8831a63e68b84ae590764c2e96f597785afd1687`.
+
+UI update only. The transfer protocol, chunking, the transfers schema, scheduling and retry logic are unchanged.
+
+### Added
+- **Server profiles:** Settings → Server has Hosted, Local server (Emulator or Phone on Wi-Fi) and Custom address cards with a health check and an Online, Waking or Unreachable status (0106de0, 82ae9da).
+- **First-launch server choice** ("Where should files go?") and a server status pill on Transfers (79306ef).
+- **Try a demo:** quick upload (20 MB), big upload (200 MB) or a sample download, with no file to pick. It is on the empty Transfers screen and in Settings → Demo (e9a54b7).
+- **Transfers:** tap a row to expand its pieces, retries, resumes and speed, with **View details** (a9616cc).
+- **History:** a row menu with **Copy hash** and **Remove from history** (1adf026).
+
+### Changed
+- Polish and device pass across the new screens (1598e08).
+
 ## 1.1.0 (versionCode 2), 2026-10-04
 
 APK: `release/StableShare-1.1.0.apk`, 3 807 237 bytes, v2-signed, SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0`.
