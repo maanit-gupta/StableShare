@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Cleartext HTTP is allowed only because StableShare talks to a local mock server
-  (http://10.0.2.2:8080 from the emulator, or a LAN address the user enters in Settings).
-  See docs/DESIGN.md §3. A production build would pin HTTPS instead.
+  Cleartext HTTP is allowed only for a local mock server: http://10.0.2.2:8080 from the emulator,
+  or a LAN address the user enters in Settings. See docs/DESIGN.md §3. A network security config
+  cannot list IP ranges, so cleartext stays on in the base config for private addresses, and the
+  hosted server is HTTPS only (an http:// URL to it is refused, never sent in the clear).
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">stableshare.onrender.com</domain>
+    </domain-config>
 </network-security-config>

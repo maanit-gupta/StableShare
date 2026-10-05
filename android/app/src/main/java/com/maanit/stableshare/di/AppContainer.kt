@@ -12,6 +12,7 @@ import com.maanit.stableshare.data.db.AppDatabase
 import com.maanit.stableshare.data.files.FileStore
 import com.maanit.stableshare.data.net.ErrorClassifier
 import com.maanit.stableshare.data.net.ProtocolClient
+import com.maanit.stableshare.data.net.ServerHealthChecker
 import com.maanit.stableshare.data.repo.TransferRepository
 import com.maanit.stableshare.data.settings.SettingsRepository
 import com.maanit.stableshare.domain.RetryPolicy
@@ -21,6 +22,7 @@ import com.maanit.stableshare.engine.EngineBootstrap
 import com.maanit.stableshare.engine.GuardedTransferApi
 import com.maanit.stableshare.engine.HostSelectingScheduler
 import com.maanit.stableshare.engine.NetworkGuard
+import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.engine.PipelineEnv
 import com.maanit.stableshare.engine.PreviousProcessExit
 import com.maanit.stableshare.engine.RestoredTransfers
@@ -55,7 +57,11 @@ class AppContainer(context: Context) {
     val database: AppDatabase by lazy { AppDatabase.create(appContext) }
 
     val settingsRepository: SettingsRepository by lazy {
-        SettingsRepository(PreferenceDataStoreFactory.create { appContext.preferencesDataStoreFile("settings") })
+        SettingsRepository(
+            PreferenceDataStoreFactory.create(migrations = listOf(SettingsRepository.serverProfileMigration)) {
+                appContext.preferencesDataStoreFile("settings")
+            },
+        )
     }
 
     val transferRepository: TransferRepository by lazy { TransferRepository(database) }
@@ -71,6 +77,10 @@ class AppContainer(context: Context) {
 
     val connectivityMonitor: AndroidConnectivityMonitor by lazy {
         AndroidConnectivityMonitor(appContext, settingsRepository.settings.map { it.wifiOnly }, applicationScope)
+    }
+
+    val serverHealthChecker: ServerHealthChecker by lazy {
+        ServerHealthChecker(okHttpClient, isOnline = { connectivityMonitor.networkState.value != NetworkState.Offline })
     }
 
     val errorClassifier: ErrorClassifier by lazy { ErrorClassifier(connectivityMonitor) }
