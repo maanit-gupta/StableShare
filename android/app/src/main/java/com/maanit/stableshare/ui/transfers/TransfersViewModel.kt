@@ -11,6 +11,7 @@ import com.maanit.stableshare.data.settings.Settings
 import com.maanit.stableshare.domain.TransferAction
 import com.maanit.stableshare.domain.TransferState
 import com.maanit.stableshare.domain.TransferType
+import com.maanit.stableshare.engine.DemoController
 import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferProgressTracker
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -49,6 +51,10 @@ data class TransfersUi(
     val wifiOnly: Boolean = false,
     /** Upload ids whose source is a generated test file (tagged "BIN"). */
     val generated: Set<String> = emptySet(),
+    /** Ids a demo started (the "Demo" chip). */
+    val demo: Set<String> = emptySet(),
+    /** The Big upload demo showing its one-time tip, if any. */
+    val tipFor: String? = null,
 ) {
     val isEmpty: Boolean get() = loaded && active.isEmpty() && waiting.isEmpty() && attention.isEmpty()
 }
@@ -70,6 +76,9 @@ class TransfersViewModel(
     private val controller: TransferController,
     private val isGenerated: (TransferEntity) -> Boolean,
     private val appScope: CoroutineScope,
+    demoIds: Flow<Set<String>> = flowOf(emptySet()),
+    tipDismissed: Flow<Boolean> = flowOf(true),
+    private val dismissDemoTip: suspend () -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
@@ -88,9 +97,9 @@ class TransfersViewModel(
         combine(repo.observeTransfers(), repo.observeInstantUploadIds(), ::Pair),
         tracker.progress,
         restored,
-        combine(settings, networkState, ::Pair),
+        combine(settings, networkState, demoIds, tipDismissed, ::Quad),
         ticker,
-    ) { (rows, instantIds), live, restoredIds, (s, network), now ->
+    ) { (rows, instantIds), live, restoredIds, (s, network, demo, tipGone), now ->
         val wifiGated = TransferItem.wifiGated(s.wifiOnly, network)
         val items = TransferItem.buildAll(rows, live, restoredIds, now, wifiGated, instantIds).associateBy { it.id }
         val visible = rows.filter { visible(it, now) }
@@ -114,6 +123,8 @@ class TransfersViewModel(
             serverChosen = s.serverChosen,
             wifiOnly = s.wifiOnly,
             generated = rows.filter { it.type == TransferType.UPLOAD && isGenerated(it) }.mapTo(HashSet()) { it.id },
+            demo = demo,
+            tipFor = if (tipGone) null else (active + queued + paused).firstOrNull { showsTip(it, demo) }?.id,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransfersUi())
 
@@ -165,6 +176,10 @@ class TransfersViewModel(
         }
     }
 
+    fun dismissTip() {
+        appScope.launch { dismissDemoTip() }
+    }
+
     fun setMaxConcurrent(n: Int) {
         viewModelScope.launch { setLimit(n) }
     }
@@ -175,7 +190,15 @@ class TransfersViewModel(
         }
     }
 
+    /** The Big upload demo, from 10% until it finishes. */
+    private fun showsTip(item: TransferItem, demo: Set<String>): Boolean =
+        item.id in demo && item.type == TransferType.UPLOAD && DemoController.isBigUpload(item.name) &&
+            item.state != TransferState.COMPLETED && item.percent >= TIP_AT_PERCENT
+
+    private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+
     companion object {
+        const val TIP_AT_PERCENT = 10
         const val COMPLETED_LINGER_MS = 2_500L
         const val TICK_MS = 250L
         const val HEALTH_INTERVAL_MS = 30_000L

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
@@ -78,6 +79,10 @@ fun TransferRow(
     onOpen: () -> Unit,
     onAction: (TransferAction) -> Unit,
     modifier: Modifier = Modifier,
+    /** Started by demo mode: shows the "Demo" pill. */
+    demo: Boolean = false,
+    /** Shown below the progress bar (the Big upload demo's tip). */
+    tip: (@Composable () -> Unit)? = null,
 ) {
     val c = Neutral.colors
     val label = StatePresentation.listLabel(item, MAX_TRIES).text()
@@ -106,6 +111,10 @@ fun TransferRow(
                 if (item.instant) {
                     Spacer(Modifier.height(4.dp))
                     InstantPill()
+                }
+                if (demo) {
+                    Spacer(Modifier.height(4.dp))
+                    DemoPill()
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -143,6 +152,10 @@ fun TransferRow(
                 stateDescription = stateText
             },
         )
+        if (tip != null) {
+            Spacer(Modifier.height(12.dp))
+            tip()
+        }
     }
 }
 
@@ -167,7 +180,30 @@ fun RestoredPill(modifier: Modifier = Modifier) = InfoPill(stringResource(R.stri
 @Composable
 fun InstantPill(modifier: Modifier = Modifier) = InfoPill(stringResource(R.string.row_instant), modifier)
 
-/** The 20 dp `neutral.pill` badge shared by the Restored and Already on server pills. */
+/** "Demo" (UI-SPEC §12.5): the transfer was started from Try a demo. */
+@Composable
+fun DemoPill(modifier: Modifier = Modifier) = InfoPill(stringResource(R.string.demo_chip), modifier)
+
+/** The Big upload demo's one-time tip (UI-SPEC §12.5), inside its card. */
+@Composable
+fun DemoTip(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(Neutral.colors.pill, RoundedCornerShape(12.dp))
+            .padding(start = 12.dp, top = 12.dp, end = 4.dp),
+    ) {
+        Text(stringResource(R.string.demo_tip), style = Neutral.type.body, modifier = Modifier.padding(end = 8.dp))
+        NeutralTextButton(
+            stringResource(R.string.demo_tip_dismiss),
+            onClick = onDismiss,
+            color = Neutral.colors.inkPrimary,
+            modifier = Modifier.align(Alignment.End),
+        )
+    }
+}
+
+/** The 20 dp `neutral.pill` badge shared by the Restored, Already on server and Demo pills. */
 @Composable
 private fun InfoPill(text: String, modifier: Modifier = Modifier) {
     val c = Neutral.colors

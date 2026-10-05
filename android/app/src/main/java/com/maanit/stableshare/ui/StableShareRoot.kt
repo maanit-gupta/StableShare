@@ -27,6 +27,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maanit.stableshare.di.AppContainer
+import com.maanit.stableshare.ui.demo.DemoSheet
+import com.maanit.stableshare.ui.demo.DemoSheetViewModel
 import com.maanit.stableshare.ui.components.NeutralSnackbarHost
 import com.maanit.stableshare.ui.detail.DetailScreen
 import com.maanit.stableshare.ui.detail.DetailViewModel
@@ -174,7 +176,12 @@ fun StableShareRoot(
                 }
                 composable(Routes.HISTORY) {
                     val vm = appViewModel {
-                        HistoryViewModel(transferRepository, isGenerated = { fileStore.isGeneratedFile(it.localUri) }, appScope = applicationScope)
+                        HistoryViewModel(
+                            transferRepository,
+                            isGenerated = { fileStore.isGeneratedFile(it.localUri) },
+                            appScope = applicationScope,
+                            demoIds = demoStore.demoIds,
+                        )
                     }
                     HistoryScreen(vm, onOpenDetail = { navController.navigate(Routes.detail(it)) })
                 }
@@ -206,6 +213,16 @@ fun StableShareRoot(
                             }
                         },
                         onOpenLicences = { navController.navigate(Routes.LICENCES) },
+                        demoSheet = { onDismiss ->
+                            DemoSheetRoute(onDismiss = onDismiss, onStarted = {
+                                onDismiss()
+                                navController.navigate(Routes.TRANSFERS) {
+                                    popUpTo(Routes.TRANSFERS) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            })
+                        },
                     )
                 }
                 composable(Routes.LICENCES) { LicencesScreen(onBack = { navController.popBackStack() }) }
@@ -273,6 +290,9 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
             controller = transferController,
             isGenerated = { fileStore.isGeneratedFile(it.localUri) },
             appScope = applicationScope,
+            demoIds = demoStore.demoIds,
+            tipDismissed = demoStore.tipDismissed,
+            dismissDemoTip = demoStore::dismissTip,
         )
     }
     TransfersScreen(
@@ -296,6 +316,7 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
                 navController.navigate(Routes.settings())
             })
         },
+        demoSheet = { onDismiss -> DemoSheetRoute(onDismiss = onDismiss, onStarted = onDismiss) },
         serverSheet = { onDone ->
             val sheetVm = appViewModel {
                 ServerChoiceViewModel(checkHealth = serverHealthChecker::check, switchServer = serverSwitch::switchTo)
@@ -303,6 +324,19 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
             ServerChoiceSheet(sheetVm, onDone = onDone)
         },
     )
+}
+
+@Composable
+private fun DemoSheetRoute(onDismiss: () -> Unit, onStarted: () -> Unit) {
+    val vm = appViewModel {
+        DemoSheetViewModel(
+            run = demoController::run,
+            progress = demoController.progress,
+            classifier = errorClassifier,
+            appScope = applicationScope,
+        )
+    }
+    DemoSheet(vm, onDismiss = onDismiss, onStarted = onStarted)
 }
 
 /** True while QUEUED rows wait for Wi-Fi: Wi-Fi only is on and the network is not unmetered (UI-SPEC §6). */

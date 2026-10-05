@@ -99,6 +99,20 @@
     <string name="chooser_download_title">Download from server</string>
     <string name="chooser_download_subtitle">Save one of the server\'s files to this phone</string>
 
+    <!-- Demo mode -->
+    <string name="demo_try">Try a demo</string>
+    <string name="demo_sheet_title">Try a demo</string>
+    <string name="demo_quick_title">Quick upload</string>
+    <string name="demo_quick_subtitle">Uploads a 20 MB test file made on your phone.</string>
+    <string name="demo_big_title">Big upload</string>
+    <string name="demo_big_subtitle">Uploads a 200 MB test file. Try pausing it or turning off Wi-Fi.</string>
+    <string name="demo_download_title">Download a sample</string>
+    <string name="demo_download_subtitle">Downloads a file from the server.</string>
+    <string name="demo_making">Making test file…</string>
+    <string name="demo_chip">Demo</string>
+    <string name="demo_tip">Tip: pause it, close the app, then come back. It picks up where it left off.</string>
+    <string name="demo_tip_dismiss">Got it</string>
+
     <!-- §5.6 Upload (hoop) -->
     <string name="upload_title">Upload files</string>
     <string name="upload_subtitle">Pick a file, then take the shot.</string>
@@ -203,6 +217,7 @@
     <string name="settings_section_transfers">Transfers</string>
     <string name="settings_section_simulator">Network simulator</string>
     <string name="settings_section_about">About</string>
+    <string name="settings_section_demo">Demo</string>
     <string name="settings_server_hosted">Hosted</string>
     <string name="settings_server_hosted_subtitle">Ready to use. Nothing to set up.</string>
     <string name="settings_server_local">Local server</string>

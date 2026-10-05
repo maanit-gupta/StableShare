@@ -91,7 +91,7 @@ class SettingsScreenTest {
                                 }
                             },
                         )
-                        SettingsScreen(vm, section = null, onShowIntro = {}, onOpenLicences = {})
+                        SettingsScreen(vm, section = null, onShowIntro = {}, onOpenLicences = {}, demoSheet = {})
                     }
                 }
             }

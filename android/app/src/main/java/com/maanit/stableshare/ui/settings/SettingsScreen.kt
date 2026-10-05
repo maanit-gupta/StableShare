@@ -123,8 +123,11 @@ fun SettingsScreen(
     section: String?,
     onShowIntro: () -> Unit,
     onOpenLicences: () -> Unit,
+    /** The "Try a demo" sheet. */
+    demoSheet: @Composable (onDismiss: () -> Unit) -> Unit,
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    var demo by rememberSaveable { mutableStateOf(false) }
     val snackbar = LocalSnackbar.current
     val resources = LocalContext.current.resources
     LaunchedEffect(vm) { vm.snackbarMessages.collect { snackbar.showSnackbar(it.resolve(resources)) } }
@@ -207,9 +210,13 @@ fun SettingsScreen(
             }
             Section(stringResource(R.string.settings_section_simulator)) { SimulatorCard(vm) }
             Section(stringResource(R.string.settings_section_about)) { AboutCard(onShowIntro, onOpenLicences) }
+            Section(stringResource(R.string.settings_section_demo)) {
+                NeutralTextButton(stringResource(R.string.demo_try), color = Neutral.colors.inkPrimary, onClick = { demo = true })
+            }
         }
         StatusBarScrim(Neutral.colors.page)
     }
+    if (demo) demoSheet { demo = false }
 }
 
 /** A labelled switch with its helper line below (UI-SPEC §5.10: checked track `neutral.inkPrimary`). */

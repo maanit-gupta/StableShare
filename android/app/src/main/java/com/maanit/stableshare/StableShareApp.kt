@@ -27,6 +27,7 @@ class StableShareApp : Application(), Configuration.Provider {
         container.connectivityMonitor.start()
         container.engineBootstrap.start()
         container.resultNotifier.start()
+        container.demoController.start(container.applicationScope)
     }
 
     companion object {

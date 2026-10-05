@@ -14,9 +14,11 @@ import com.maanit.stableshare.data.net.ErrorClassifier
 import com.maanit.stableshare.data.net.ProtocolClient
 import com.maanit.stableshare.data.net.ServerHealthChecker
 import com.maanit.stableshare.data.repo.TransferRepository
+import com.maanit.stableshare.data.settings.DemoStore
 import com.maanit.stableshare.data.settings.SettingsRepository
 import com.maanit.stableshare.domain.RetryPolicy
 import com.maanit.stableshare.engine.AndroidConnectivityMonitor
+import com.maanit.stableshare.engine.DemoController
 import com.maanit.stableshare.engine.DownloadPipeline
 import com.maanit.stableshare.engine.EngineBootstrap
 import com.maanit.stableshare.engine.GuardedTransferApi
@@ -63,6 +65,10 @@ class AppContainer(context: Context) {
                 appContext.preferencesDataStoreFile("settings")
             },
         )
+    }
+
+    val demoStore: DemoStore by lazy {
+        DemoStore(PreferenceDataStoreFactory.create { appContext.preferencesDataStoreFile("demo") })
     }
 
     val transferRepository: TransferRepository by lazy { TransferRepository(database) }
@@ -172,6 +178,18 @@ class AppContainer(context: Context) {
             settings = { settingsRepository.current() },
             scheduler = scheduler,
             engine = transferEngine,
+        )
+    }
+
+    val demoController: DemoController by lazy {
+        DemoController(
+            files = fileStore,
+            controller = transferController,
+            api = protocolClient,
+            repo = transferRepository,
+            store = demoStore,
+            settings = { settingsRepository.current() },
+            checkHealth = serverHealthChecker::check,
         )
     }
 

@@ -56,6 +56,8 @@ open class FileStore(
     private val generatedDir: File = context.getExternalFilesDir("generated")
         ?: File(context.filesDir, "generated"),
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Demo-mode test files; deleted once their upload is verified or cancelled. */
+    private val demoDir: File = File(context.cacheDir, "demo"),
 ) {
 
     // ---- upload sources ----
@@ -250,21 +252,37 @@ open class FileStore(
 
     /** True if [uri] points at a test file this app generated (shown as "BIN" / "Generated test file"). */
     fun isGeneratedFile(uri: String): Boolean {
-        val parsed = Uri.parse(uri)
-        if (parsed.scheme != "file") return false
-        val path = parsed.path ?: return false
-        return File(path).canonicalFile.parentFile == generatedDir.canonicalFile
+        val dir = parentOf(uri) ?: return false
+        return dir == generatedDir.canonicalFile || dir == demoDir.canonicalFile
     }
+
+    /** True if [uri] points at a demo-mode test file. */
+    fun isDemoFile(uri: String): Boolean = parentOf(uri) == demoDir.canonicalFile
+
+    /** Demo-mode test files currently on disk. */
+    fun demoFiles(): List<File> = demoDir.listFiles()?.filter { it.isFile }.orEmpty()
 
     /** Writes [sizeMb] MiB of pseudo-random bytes; a cancelled or failed run leaves no file. */
     suspend fun generateTestFile(
         sizeMb: Int,
         seed: Long = System.nanoTime(),
         onProgress: (Long) -> Unit = {},
+    ): File = writeRandomFile(generatedDir, "test", sizeMb, seed, onProgress)
+
+    /** As [generateTestFile], into the cache dir as `demo-<n>MB-<timestamp>.bin`. */
+    suspend fun generateDemoFile(sizeMb: Int, onProgress: (Long) -> Unit = {}): File =
+        writeRandomFile(demoDir, "demo", sizeMb, System.nanoTime(), onProgress)
+
+    private suspend fun writeRandomFile(
+        dir: File,
+        prefix: String,
+        sizeMb: Int,
+        seed: Long,
+        onProgress: (Long) -> Unit,
     ): File = withContext(io) {
         require(sizeMb > 0) { "sizeMb must be positive" }
-        generatedDir.mkdirs()
-        val file = File(generatedDir, "test-${sizeMb}MB-${System.currentTimeMillis()}.bin")
+        dir.mkdirs()
+        val file = File(dir, "$prefix-${sizeMb}MB-${System.currentTimeMillis()}.bin")
         val random = Random(seed)
         val buffer = ByteArray(MIB)
         try {
@@ -287,6 +305,13 @@ open class FileStore(
     }
 
     // ---- helpers ----
+
+    private fun parentOf(uri: String): File? {
+        val parsed = Uri.parse(uri)
+        if (parsed.scheme != "file") return null
+        val path = parsed.path ?: return null
+        return File(path).canonicalFile.parentFile
+    }
 
     private suspend fun hashStream(input: InputStream, onProgress: (Long) -> Unit): String {
         val digest = MessageDigest.getInstance("SHA-256")

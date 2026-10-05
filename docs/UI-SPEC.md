@@ -756,3 +756,10 @@ Server status reuses existing faces (4.1). No new mascot art.
 - Used by the first-run server sheet (all four rows) and the Transfers empty state (Waking only; every other state keeps the 5.4.3 empty-state mascot).
 - Face and arm changes cross-fade over `quick`, as in 4.1. Reduced motion follows section 10: no slide or wave; moods still cross-fade.
 - These instances are decorative on Neutral screens (`contentDescription = null`, 4.2). The server state is always available as text through the status dot label (12.1) on the same screen.
+
+### 12.5 Demo mode
+
+- **Entry points:** a third button under Upload/Download on the Transfers empty state (the Neutral text button, 14 sp SemiBold `neutral.inkPrimary`, 48 dp touch target, 8 dp below the button row), and a "Demo" section at the bottom of Settings with the same text button.
+- **Sheet:** the "New transfer" chooser sheet (5.4.4) titled "Try a demo", with three option rows (72 dp minimum height, 12 dp vertical padding so two-line subtitles fit). While one demo runs, every row is disabled (title in `neutral.inkTertiary`). The running row swaps its subtitle for "Making test file…" with a 4 dp `ProgressBar` (accent fill) 8 dp below, or "Waking the server…" while the hosted server wakes. The sheet closes once the transfer exists. Errors show in the sheet's own snackbar, as in 5.7.
+- **Demo pill:** the 20 dp `neutral.pill` badge used by "Already on server" (5.4.1), text "Demo", 4 dp below the previous line, on transfer rows and History rows.
+- **Tip:** inside the Big upload's transfer card, 12 dp below the progress bar: `neutral.pill` fill, 12 dp radius, 12 dp padding (4 dp at the end so the button's touch target lines up), text in `neutral.body`, with the "Got it" text button (as above) aligned to the end. No icon, no motion.

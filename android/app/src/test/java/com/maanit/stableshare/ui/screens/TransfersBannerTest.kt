@@ -106,7 +106,7 @@ class TransfersBannerTest {
         )
         compose.setContent {
             StableShareTheme(reducedMotion = true) {
-                TransfersScreen(vm, onOpenDetail = {}, onOpenUpload = {}, onOpenSettings = {}, downloadSheet = {}, serverSheet = {})
+                TransfersScreen(vm, onOpenDetail = {}, onOpenUpload = {}, onOpenSettings = {}, downloadSheet = {}, demoSheet = {}, serverSheet = {})
             }
         }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("report_q3.pdf").fetchSemanticsNodes().isNotEmpty() }

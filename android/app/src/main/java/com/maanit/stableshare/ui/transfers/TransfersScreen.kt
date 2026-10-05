@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -48,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
@@ -66,6 +68,7 @@ import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.ui.components.Banner
 import com.maanit.stableshare.ui.components.CancelTransferDialog
 import com.maanit.stableshare.ui.components.CountPill
+import com.maanit.stableshare.ui.components.DemoTip
 import com.maanit.stableshare.ui.components.NeutralTextButton
 import com.maanit.stableshare.ui.components.OutlinedNeutralButton
 import com.maanit.stableshare.ui.components.PrimaryButton
@@ -95,6 +98,8 @@ fun TransfersScreen(
     /** Opens Settings, scrolled to [Routes.SECTION_SERVER] when given. */
     onOpenSettings: (section: String?) -> Unit,
     downloadSheet: @Composable (onDismiss: () -> Unit) -> Unit,
+    /** The "Try a demo" sheet. */
+    demoSheet: @Composable (onDismiss: () -> Unit) -> Unit,
     /** The first-run "Where should files go?" sheet; [onDone] runs once it has saved and slid away. */
     serverSheet: @Composable (onDone: () -> Unit) -> Unit,
 ) {
@@ -106,6 +111,7 @@ fun TransfersScreen(
     var download by rememberSaveable { mutableStateOf(false) }
     var limitSheet by rememberSaveable { mutableStateOf(false) }
     var serverChoice by rememberSaveable { mutableStateOf(false) }
+    var demo by rememberSaveable { mutableStateOf(false) }
     var cancelTarget by remember { mutableStateOf<TransferItem?>(null) }
 
     // Health on resume (at most once per 30 s, the ViewModel throttles) and while visible.
@@ -140,6 +146,7 @@ fun TransfersScreen(
                     waking = waking,
                     onUpload = onOpenUpload,
                     onDownload = { download = true },
+                    onDemo = { demo = true },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
             }
@@ -154,9 +161,9 @@ fun TransfersScreen(
                         BannerSlot(network, ui.wifiOnly, reachable, ui.serverUrl, onOpenSettings)
                     }
                 }
-                section("active", R.string.section_active, ui.active, ui, onOpenDetail, onAction)
-                section("waiting", R.string.section_waiting, ui.waiting, ui, onOpenDetail, onAction)
-                section("attention", R.string.section_attention, ui.attention, ui, onOpenDetail, onAction)
+                section("active", R.string.section_active, ui.active, ui, onOpenDetail, onAction, vm::dismissTip)
+                section("waiting", R.string.section_waiting, ui.waiting, ui, onOpenDetail, onAction, vm::dismissTip)
+                section("attention", R.string.section_attention, ui.attention, ui, onOpenDetail, onAction, vm::dismissTip)
             }
             FloatingActionButton(
                 onClick = { chooser = true },
@@ -186,6 +193,7 @@ fun TransfersScreen(
         )
     }
     if (download) downloadSheet { download = false }
+    if (demo) demoSheet { demo = false }
     if (limitSheet) LimitSheet(ui.limit, onSelect = vm::setMaxConcurrent, onDismiss = { limitSheet = false })
     if (serverChoice) serverSheet { serverChoice = false }
     cancelTarget?.let { target ->
@@ -273,6 +281,7 @@ private fun LazyListScope.section(
     ui: TransfersUi,
     onOpen: (String) -> Unit,
     onAction: (TransferItem, TransferAction) -> Unit,
+    onDismissTip: () -> Unit,
 ) {
     if (items.isEmpty()) return
     item(key = "section-$key") {
@@ -291,6 +300,12 @@ private fun LazyListScope.section(
             generated = item.id in ui.generated,
             onOpen = { onOpen(item.id) },
             onAction = { onAction(item, it) },
+            demo = item.id in ui.demo,
+            tip = if (item.id == ui.tipFor) {
+                { DemoTip(onDismiss = onDismissTip) }
+            } else {
+                null
+            },
             modifier = Modifier
                 .animateItem(
                     fadeInSpec = if (reduced) null else tween(Motion.STANDARD_MS),
@@ -304,7 +319,7 @@ private fun LazyListScope.section(
 
 /** Empty state (UI-SPEC §5.4.3); while the hosted server wakes, Nimbus searches (§12.4). */
 @Composable
-private fun EmptyState(waking: Boolean, onUpload: () -> Unit, onDownload: () -> Unit, modifier: Modifier = Modifier) {
+private fun EmptyState(waking: Boolean, onUpload: () -> Unit, onDownload: () -> Unit, onDemo: () -> Unit, modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.padding(top = 24.dp)) {
@@ -324,6 +339,8 @@ private fun EmptyState(waking: Boolean, onUpload: () -> Unit, onDownload: () -> 
                 PrimaryButton(stringResource(R.string.empty_upload), onClick = onUpload)
                 OutlinedNeutralButton(stringResource(R.string.empty_download), onClick = onDownload)
             }
+            Spacer(Modifier.height(8.dp))
+            NeutralTextButton(stringResource(R.string.demo_try), onClick = onDemo, color = Neutral.colors.inkPrimary)
         }
     }
 }
@@ -379,14 +396,22 @@ private fun ChooserSheet(onDismiss: () -> Unit, onUpload: () -> Unit, onDownload
     }
 }
 
+/** A 72 dp sheet option: accent icon circle, title and subtitle; [footer] sits under the subtitle. */
 @Composable
-private fun ChooserOption(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+internal fun ChooserOption(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    footer: (@Composable () -> Unit)? = null,
+) {
     Row(
         Modifier
             .fillMaxWidth()
-            .height(72.dp)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp),
+            .heightIn(min = 72.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).background(Neutral.colors.accentTint, CircleShape), contentAlignment = Alignment.Center) {
@@ -394,8 +419,9 @@ private fun ChooserOption(icon: ImageVector, title: String, subtitle: String, on
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = Neutral.type.rowTitle)
+            Text(title, style = Neutral.type.rowTitle, color = if (enabled) Color.Unspecified else Neutral.colors.inkTertiary)
             Text(subtitle, style = Neutral.type.meta)
+            footer?.invoke()
         }
     }
 }

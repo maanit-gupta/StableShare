@@ -51,6 +51,7 @@ import com.maanit.stableshare.domain.TransferType
 import com.maanit.stableshare.ui.FileIntents
 import com.maanit.stableshare.ui.components.CheckBadge
 import com.maanit.stableshare.ui.components.FileIcon
+import com.maanit.stableshare.ui.components.DemoPill
 import com.maanit.stableshare.ui.components.InstantPill
 import com.maanit.stableshare.ui.components.NeutralDialog
 import com.maanit.stableshare.ui.components.NeutralTextButton
@@ -155,6 +156,10 @@ internal fun HistoryRow(item: HistoryItem, onOpen: () -> Unit, onRemove: () -> U
                 if (item.instant) {
                     Spacer(Modifier.height(4.dp))
                     InstantPill()
+                }
+                if (item.demo) {
+                    Spacer(Modifier.height(4.dp))
+                    DemoPill()
                 }
             }
             Box {
