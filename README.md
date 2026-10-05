@@ -20,13 +20,15 @@ StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads 
 
 ## Demo
 
-<p align="center">
-  <img src="docs/demo/stableshare-demo.gif" width="320" alt="StableShare demo: first launch and server choice, Try a demo, an upload and a download, pause and resume, History, switching to the local server">
-</p>
-
 | Transfers | Detail | History | Settings |
 |---|---|---|---|
 | ![Transfers](docs/screenshots/05-transfers-active.png) | ![Detail](docs/screenshots/07-detail-transferring.png) | ![History](docs/screenshots/11-history.png) | ![Settings](docs/screenshots/12-settings.png) |
+
+<p align="center">
+  <img src="docs/demo/stableshare-demo.gif" width="320" alt="StableShare demo: a 200 MB upload and a 50 MB download run side by side, the upload is paused and resumed, verified, and both show as Verified in History">
+  <br>
+  <sub>A 200 MB upload and a download run together → pause and resume → whole-file verification → Verified in History</sub>
+</p>
 
 ## Install
 
