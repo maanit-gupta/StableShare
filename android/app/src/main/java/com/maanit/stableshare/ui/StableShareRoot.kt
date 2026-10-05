@@ -45,6 +45,8 @@ import com.maanit.stableshare.ui.theme.Motion
 import com.maanit.stableshare.ui.theme.Neutral
 import com.maanit.stableshare.ui.transfers.DownloadSheet
 import com.maanit.stableshare.ui.transfers.DownloadSheetViewModel
+import com.maanit.stableshare.ui.transfers.ServerChoiceSheet
+import com.maanit.stableshare.ui.transfers.ServerChoiceViewModel
 import com.maanit.stableshare.ui.transfers.TransfersScreen
 import com.maanit.stableshare.ui.transfers.TransfersViewModel
 import com.maanit.stableshare.ui.upload.UploadScreen
@@ -194,7 +196,7 @@ fun StableShareRoot(
                     }
                     SettingsScreen(
                         vm,
-                        scrollToTransfers = entry.arguments?.getString("section") == Routes.SECTION_TRANSFERS,
+                        section = entry.arguments?.getString("section"),
                         onShowIntro = {
                             scope.launch {
                                 container.settingsRepository.setOnboardingCompleted(false)
@@ -266,7 +268,8 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
             restored = transferEngine.restoredIds,
             settings = settingsRepository.settings,
             networkState = connectivityMonitor.networkState,
-            health = { protocolClient.health().ok },
+            checkHealth = serverHealthChecker::check,
+            setLimit = settingsRepository::setMaxConcurrent,
             controller = transferController,
             isGenerated = { fileStore.isGeneratedFile(it.localUri) },
             appScope = applicationScope,
@@ -276,7 +279,7 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
         vm = vm,
         onOpenDetail = { navController.navigate(Routes.detail(it)) },
         onOpenUpload = { navController.navigate(Routes.UPLOAD) },
-        onOpenSettings = { section -> navController.navigate(Routes.settings(if (section) Routes.SECTION_TRANSFERS else null)) },
+        onOpenSettings = { section -> navController.navigate(Routes.settings(section)) },
         downloadSheet = { onDismiss ->
             val sheetVm = appViewModel {
                 DownloadSheetViewModel(
@@ -292,6 +295,12 @@ private fun TransfersRoute(container: AppContainer, navController: NavHostContro
                 onDismiss()
                 navController.navigate(Routes.settings())
             })
+        },
+        serverSheet = { onDone ->
+            val sheetVm = appViewModel {
+                ServerChoiceViewModel(checkHealth = serverHealthChecker::check, switchServer = serverSwitch::switchTo)
+            }
+            ServerChoiceSheet(sheetVm, onDone = onDone)
         },
     )
 }

@@ -91,7 +91,7 @@ class SettingsScreenTest {
                                 }
                             },
                         )
-                        SettingsScreen(vm, scrollToTransfers = false, onShowIntro = {}, onOpenLicences = {})
+                        SettingsScreen(vm, section = null, onShowIntro = {}, onOpenLicences = {})
                     }
                 }
             }

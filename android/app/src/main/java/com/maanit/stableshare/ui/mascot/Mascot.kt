@@ -79,6 +79,8 @@ fun Mascot(
     plane: CloudPlane = CloudPlane.None,
     waveLoop: Boolean = mood.motion == MascotMotion.WAVE_LOOP,
     decorative: Boolean = false,
+    /** False keeps a rainy mood dry (UI-SPEC §12.4: an unreachable server is sad without rain). */
+    rain: Boolean = mood.rain,
 ) {
     val reduced = LocalReducedMotion.current
     val description = stringResource(R.string.mascot_description, stringResource(mood.description))
@@ -160,7 +162,7 @@ fun Mascot(
                     },
                 )
             }
-            AnimatedVisibility(mood.rain, enter = fadeIn(Motion.quick()), exit = fadeOut(Motion.quick())) {
+            AnimatedVisibility(rain, enter = fadeIn(Motion.quick()), exit = fadeOut(Motion.quick())) {
                 Rain(loop?.takeIf { mood.motion == MascotMotion.RAIN }?.cycle(1_400, "rain"))
             }
         }
@@ -281,6 +283,12 @@ internal fun InfiniteTransition.cycle(periodMs: Int, label: String): State<Float
 
 /** A mascot sized as a fixed width (Neutral illustrations). */
 @Composable
-fun MascotIllustration(mood: MascotMood, width: Dp, plane: CloudPlane = CloudPlane.None, modifier: Modifier = Modifier) {
-    Mascot(mood, modifier.size(width, width / CloudGeometry.ASPECT), plane = plane, decorative = true)
+fun MascotIllustration(
+    mood: MascotMood,
+    width: Dp,
+    plane: CloudPlane = CloudPlane.None,
+    modifier: Modifier = Modifier,
+    rain: Boolean = mood.rain,
+) {
+    Mascot(mood, modifier.size(width, width / CloudGeometry.ASPECT), plane = plane, decorative = true, rain = rain)
 }

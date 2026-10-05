@@ -12,6 +12,7 @@ object Routes {
     const val UPLOAD = "upload"
     const val LICENCES = "licences"
 
+    const val SECTION_SERVER = "server"
     const val SECTION_TRANSFERS = "transfers"
 
     fun settings(section: String? = null) = if (section == null) "settings" else "settings?section=$section"

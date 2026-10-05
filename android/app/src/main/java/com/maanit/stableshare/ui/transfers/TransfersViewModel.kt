@@ -4,7 +4,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maanit.stableshare.data.db.TransferEntity
+import com.maanit.stableshare.data.net.ServerHealth
 import com.maanit.stableshare.data.repo.TransferRepository
+import com.maanit.stableshare.data.settings.ServerProfile
 import com.maanit.stableshare.data.settings.Settings
 import com.maanit.stableshare.domain.TransferAction
 import com.maanit.stableshare.domain.TransferState
@@ -14,8 +16,8 @@ import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferProgressTracker
 import com.maanit.stableshare.ui.model.Condition
 import com.maanit.stableshare.ui.model.TransferItem
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -39,6 +42,9 @@ data class TransfersUi(
     val speed: Double? = null,
     val limit: Int = 2,
     val serverUrl: String = "",
+    val serverProfile: ServerProfile = ServerProfile.HOSTED,
+    /** True until settings load, so the first-run server sheet never flashes. */
+    val serverChosen: Boolean = true,
     /** The Wi-Fi only setting (the banner shows when it is on over a metered network). */
     val wifiOnly: Boolean = false,
     /** Upload ids whose source is a generated test file (tagged "BIN"). */
@@ -58,7 +64,9 @@ class TransfersViewModel(
     restored: StateFlow<Set<String>>,
     settings: Flow<Settings>,
     val networkState: StateFlow<NetworkState>,
-    private val health: suspend () -> Boolean,
+    /** GET /health on a server (Waking first for HOSTED); completes after one final result. */
+    private val checkHealth: (ServerProfile, String) -> Flow<ServerHealth>,
+    private val setLimit: suspend (Int) -> Unit,
     private val controller: TransferController,
     private val isGenerated: (TransferEntity) -> Boolean,
     private val appScope: CoroutineScope,
@@ -102,15 +110,26 @@ class TransfersViewModel(
             speed = speed.takeIf { it > 0 },
             limit = s.maxConcurrent,
             serverUrl = s.serverUrl,
+            serverProfile = s.serverProfile,
+            serverChosen = s.serverChosen,
             wifiOnly = s.wifiOnly,
             generated = rows.filter { it.type == TransferType.UPLOAD && isGenerated(it) }.mapTo(HashSet()) { it.id },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransfersUi())
 
-    private val _serverReachable = MutableStateFlow(true)
+    private val _serverHealth = MutableStateFlow<ServerHealth?>(null)
 
-    /** False after a failed GET /health (the "Can't reach the server" banner). */
-    val serverReachable: StateFlow<Boolean> = _serverReachable.asStateFlow()
+    /** The selected server's last health result; null until the first check answers (the status pill). */
+    val serverHealth: StateFlow<ServerHealth?> = _serverHealth.asStateFlow()
+
+    /** False after a failed health check (the "Can't reach the server" banner). */
+    val serverReachable: StateFlow<Boolean> = _serverHealth
+        .map { it !is ServerHealth.Unreachable && it != ServerHealth.Invalid }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    private var healthJob: Job? = null
+    private var checkedUrl: String? = null
+    private var checkedAt = 0L
 
     /** Non-terminal rows show; COMPLETED rows linger 2.5 s after this screen saw them finish. */
     private fun visible(row: TransferEntity, now: Long): Boolean {
@@ -126,17 +145,28 @@ class TransfersViewModel(
         }
     }
 
-    fun checkHealth() {
-        viewModelScope.launch {
-            _serverReachable.value = try {
-                health()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.i(TAG, "health check failed: ${e.message}")
-                false
+    /**
+     * Checks the selected server: at once when it changed, otherwise at most once per
+     * [HEALTH_INTERVAL_MS] and never while a check (a hosted wake-up can take a minute) is running.
+     */
+    fun refreshHealth() {
+        val s = ui.value.takeIf { it.loaded } ?: return
+        val now = clock()
+        if (s.serverUrl == checkedUrl && (healthJob?.isActive == true || now - checkedAt < HEALTH_INTERVAL_MS)) return
+        healthJob?.cancel()
+        if (s.serverUrl != checkedUrl) _serverHealth.value = null
+        checkedUrl = s.serverUrl
+        checkedAt = now
+        healthJob = viewModelScope.launch {
+            checkHealth(s.serverProfile, s.serverUrl).collect {
+                if (it is ServerHealth.Unreachable) Log.i(TAG, "health check failed: ${it.reason}")
+                _serverHealth.value = it
             }
         }
+    }
+
+    fun setMaxConcurrent(n: Int) {
+        viewModelScope.launch { setLimit(n) }
     }
 
     fun perform(id: String, action: TransferAction) {

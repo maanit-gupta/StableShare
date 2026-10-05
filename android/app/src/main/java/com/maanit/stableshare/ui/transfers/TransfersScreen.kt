@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.maanit.stableshare.R
+import com.maanit.stableshare.data.net.ServerHealth
+import com.maanit.stableshare.data.settings.ServerProfile
+import com.maanit.stableshare.data.settings.SettingsRepository
 import com.maanit.stableshare.domain.TransferAction
 import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.ui.components.Banner
@@ -66,6 +70,9 @@ import com.maanit.stableshare.ui.components.NeutralTextButton
 import com.maanit.stableshare.ui.components.OutlinedNeutralButton
 import com.maanit.stableshare.ui.components.PrimaryButton
 import com.maanit.stableshare.ui.components.SectionHeader
+import com.maanit.stableshare.ui.components.SegmentedControl
+import com.maanit.stableshare.ui.components.ServerPill
+import com.maanit.stableshare.ui.components.dot
 import com.maanit.stableshare.ui.components.StatusBarScrim
 import com.maanit.stableshare.ui.components.TransferRow
 import com.maanit.stableshare.ui.mascot.CloudPlane
@@ -73,6 +80,7 @@ import com.maanit.stableshare.ui.mascot.MascotIllustration
 import com.maanit.stableshare.ui.mascot.MascotMood
 import com.maanit.stableshare.ui.model.Format
 import com.maanit.stableshare.ui.model.TransferItem
+import com.maanit.stableshare.ui.nav.Routes
 import com.maanit.stableshare.ui.theme.LocalReducedMotion
 import com.maanit.stableshare.ui.theme.Motion
 import com.maanit.stableshare.ui.theme.Neutral
@@ -84,25 +92,38 @@ fun TransfersScreen(
     vm: TransfersViewModel,
     onOpenDetail: (String) -> Unit,
     onOpenUpload: () -> Unit,
-    onOpenSettings: (transfersSection: Boolean) -> Unit,
+    /** Opens Settings, scrolled to [Routes.SECTION_SERVER] when given. */
+    onOpenSettings: (section: String?) -> Unit,
     downloadSheet: @Composable (onDismiss: () -> Unit) -> Unit,
+    /** The first-run "Where should files go?" sheet; [onDone] runs once it has saved and slid away. */
+    serverSheet: @Composable (onDone: () -> Unit) -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val network by vm.networkState.collectAsStateWithLifecycle()
     val reachable by vm.serverReachable.collectAsStateWithLifecycle()
+    val health by vm.serverHealth.collectAsStateWithLifecycle()
     var chooser by rememberSaveable { mutableStateOf(false) }
     var download by rememberSaveable { mutableStateOf(false) }
+    var limitSheet by rememberSaveable { mutableStateOf(false) }
+    var serverChoice by rememberSaveable { mutableStateOf(false) }
     var cancelTarget by remember { mutableStateOf<TransferItem?>(null) }
 
-    // GET /health when the screen resumes and every 30 s while it is visible.
+    // Health on resume (at most once per 30 s, the ViewModel throttles) and while visible.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                vm.checkHealth()
+                vm.refreshHealth()
                 delay(TransfersViewModel.HEALTH_INTERVAL_MS)
             }
         }
+    }
+    // A new server (or settings just loaded) is checked at once.
+    LaunchedEffect(ui.loaded, ui.serverUrl) { vm.refreshHealth() }
+    LaunchedEffect(ui.loaded, ui.serverChosen) { if (ui.loaded && !ui.serverChosen) serverChoice = true }
+    val waking = health == ServerHealth.Waking
+    val header: @Composable () -> Unit = {
+        Header(ui, health, onOpenServer = { onOpenSettings(Routes.SECTION_SERVER) }, onOpenLimit = { limitSheet = true })
     }
 
     val onAction: (TransferItem, TransferAction) -> Unit = { item, action ->
@@ -113,9 +134,10 @@ fun TransfersScreen(
         val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         if (ui.isEmpty) {
             Column(Modifier.fillMaxSize().padding(top = top + 24.dp, start = 24.dp, end = 24.dp)) {
-                Header(ui, onOpenSettings)
+                header()
                 BannerSlot(network, ui.wifiOnly, reachable, ui.serverUrl, onOpenSettings)
                 EmptyState(
+                    waking = waking,
                     onUpload = onOpenUpload,
                     onDownload = { download = true },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -128,7 +150,7 @@ fun TransfersScreen(
             ) {
                 item(key = "header") {
                     Column {
-                        Header(ui, onOpenSettings)
+                        header()
                         BannerSlot(network, ui.wifiOnly, reachable, ui.serverUrl, onOpenSettings)
                     }
                 }
@@ -164,6 +186,8 @@ fun TransfersScreen(
         )
     }
     if (download) downloadSheet { download = false }
+    if (limitSheet) LimitSheet(ui.limit, onSelect = vm::setMaxConcurrent, onDismiss = { limitSheet = false })
+    if (serverChoice) serverSheet { serverChoice = false }
     cancelTarget?.let { target ->
         CancelTransferDialog(
             fileName = target.name,
@@ -177,14 +201,27 @@ fun TransfersScreen(
 }
 
 @Composable
-private fun Header(ui: TransfersUi, onOpenSettings: (Boolean) -> Unit) {
+private fun Header(ui: TransfersUi, health: ServerHealth?, onOpenServer: () -> Unit, onOpenLimit: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.transfers_title), style = Neutral.type.title, modifier = Modifier.weight(1f))
+        ServerPill(
+            label = stringResource(
+                when (ui.serverProfile) {
+                    ServerProfile.HOSTED -> R.string.server_pill_hosted
+                    ServerProfile.EMULATOR, ServerProfile.LAN -> R.string.server_pill_local
+                    ServerProfile.CUSTOM -> R.string.server_pill_custom
+                },
+            ),
+            dot = health.dot(),
+            onClick = onOpenServer,
+            onClickLabel = stringResource(R.string.cd_open_server_settings),
+        )
+        Spacer(Modifier.width(8.dp))
         CountPill(
             stringResource(R.string.limit_pill_label),
             ui.limit,
-            onClick = { onOpenSettings(true) },
-            onClickLabel = stringResource(R.string.cd_open_transfer_settings),
+            onClick = onOpenLimit,
+            onClickLabel = stringResource(R.string.cd_change_limit),
         )
     }
     Spacer(Modifier.height(4.dp))
@@ -204,7 +241,7 @@ internal fun BannerSlot(
     wifiOnly: Boolean,
     reachable: Boolean,
     serverUrl: String,
-    onOpenSettings: (Boolean) -> Unit,
+    onOpenSettings: (section: String?) -> Unit,
 ) {
     when {
         network == NetworkState.Offline -> {
@@ -220,7 +257,7 @@ internal fun BannerSlot(
             Banner(Icons.Outlined.Dns, stringResource(R.string.banner_server_unreachable, serverUrl)) {
                 NeutralTextButton(
                     stringResource(R.string.banner_server_action),
-                    onClick = { onOpenSettings(false) },
+                    onClick = { onOpenSettings(null) },
                     color = Neutral.colors.inkPrimary,
                     underline = true,
                 )
@@ -265,19 +302,19 @@ private fun LazyListScope.section(
     }
 }
 
-/** Empty state (UI-SPEC §5.4.3). */
+/** Empty state (UI-SPEC §5.4.3); while the hosted server wakes, Nimbus searches (§12.4). */
 @Composable
-private fun EmptyState(onUpload: () -> Unit, onDownload: () -> Unit, modifier: Modifier = Modifier) {
+private fun EmptyState(waking: Boolean, onUpload: () -> Unit, onDownload: () -> Unit, modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.padding(top = 24.dp)) {
-                MascotIllustration(MascotMood.IDLE, 140.dp, plane = CloudPlane.Perched)
+                MascotIllustration(if (waking) MascotMood.SEARCHING else MascotMood.IDLE, 140.dp, plane = CloudPlane.Perched)
             }
             Spacer(Modifier.height(16.dp))
             Text(stringResource(R.string.empty_title), style = Neutral.type.heading, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
             Text(
-                stringResource(R.string.empty_body),
+                stringResource(if (waking) R.string.empty_waking else R.string.empty_body),
                 style = Neutral.type.body,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.widthIn(max = 280.dp),
@@ -287,6 +324,29 @@ private fun EmptyState(onUpload: () -> Unit, onDownload: () -> Unit, modifier: M
                 PrimaryButton(stringResource(R.string.empty_upload), onClick = onUpload)
                 OutlinedNeutralButton(stringResource(R.string.empty_download), onClick = onDownload)
             }
+        }
+    }
+}
+
+/** "Transfers at the same time" from the Limit pill: the same 1–4 control as Settings. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LimitSheet(limit: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Neutral.colors.card,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    ) {
+        Column(Modifier.navigationBarsPadding().padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
+            Text(stringResource(R.string.settings_concurrency), style = Neutral.type.heading, modifier = Modifier.padding(vertical = 24.dp))
+            SegmentedControl(
+                options = (SettingsRepository.MIN_CONCURRENT..SettingsRepository.MAX_CONCURRENT).toList(),
+                selected = limit,
+                label = { it.toString() },
+                onSelect = onSelect,
+                modifier = Modifier.testTag("limitSheet"),
+            )
         }
     }
 }

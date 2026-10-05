@@ -38,7 +38,8 @@
     <string name="cd_back">Back</string>
     <string name="cd_more_options">More options</string>
     <string name="cd_copy">Copy %1$s</string>
-    <string name="cd_open_transfer_settings">Open transfer settings</string>
+    <string name="cd_change_limit">Change transfer limit</string>
+    <string name="cd_open_server_settings">Open server settings</string>
     <string name="state_expanded">Expanded</string>
     <string name="state_collapsed">Collapsed</string>
     <!-- §10: progress state description, e.g. "Uploading, 42 percent" -->
@@ -50,6 +51,9 @@
     <string name="transfers_summary_speed">%1$d active, %2$d waiting, %3$s</string>
     <string name="transfers_idle">Nothing moving right now</string>
     <string name="limit_pill_label">Limit</string>
+    <string name="server_pill_hosted">Hosted</string>
+    <string name="server_pill_local">Local</string>
+    <string name="server_pill_custom">Custom</string>
     <string name="banner_offline">You\'re offline. Transfers will continue when you reconnect.</string>
     <string name="banner_wifi_only">Wi-Fi only is on. Transfers will continue on Wi-Fi.</string>
     <string name="banner_server_unreachable">Can\'t reach the server at %1$s.</string>
@@ -79,6 +83,13 @@
     <string name="empty_body">Upload a file from your phone or grab one from the server.</string>
     <string name="empty_upload">Upload</string>
     <string name="empty_download">Download</string>
+    <string name="empty_waking">Waking the server…</string>
+
+    <!-- §12 First-run server choice -->
+    <string name="server_sheet_title">Where should files go?</string>
+    <string name="server_sheet_local_subtitle">For testing with your own server.</string>
+    <string name="server_sheet_continue">Continue</string>
+    <string name="server_sheet_footer">You can change this later in Settings.</string>
 
     <!-- §5.4.4 FAB and chooser -->
     <string name="fab_new_transfer">New transfer</string>

@@ -12,10 +12,12 @@ import com.maanit.stableshare.data.settings.Settings
 import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.engine.TransferProgressTracker
 import com.maanit.stableshare.ui.theme.StableShareTheme
+import com.maanit.stableshare.data.net.ServerHealth
 import com.maanit.stableshare.ui.transfers.BannerSlot
 import com.maanit.stableshare.ui.transfers.TransfersScreen
 import com.maanit.stableshare.ui.transfers.TransfersViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -88,7 +90,7 @@ class TransfersBannerTest {
         val container = ApplicationProvider.getApplicationContext<StableShareApp>().container
         val repo = TransferRepository(db)
         runBlocking { repo.createUpload("report_q3.pdf", 4_096, null, "file:///report_q3.pdf", 1_024) }
-        val settings = MutableStateFlow(Settings(wifiOnly = true))
+        val settings = MutableStateFlow(Settings(wifiOnly = true, serverChosen = true))
         val network = MutableStateFlow(NetworkState.Metered)
         val vm = TransfersViewModel(
             repo = repo,
@@ -96,14 +98,15 @@ class TransfersBannerTest {
             restored = MutableStateFlow(emptySet()),
             settings = settings,
             networkState = network,
-            health = { true },
+            checkHealth = { _, _ -> flowOf(ServerHealth.Online(1, null)) },
+            setLimit = {},
             controller = container.transferController,
             isGenerated = { false },
             appScope = container.applicationScope,
         )
         compose.setContent {
             StableShareTheme(reducedMotion = true) {
-                TransfersScreen(vm, onOpenDetail = {}, onOpenUpload = {}, onOpenSettings = {}, downloadSheet = {})
+                TransfersScreen(vm, onOpenDetail = {}, onOpenUpload = {}, onOpenSettings = {}, downloadSheet = {}, serverSheet = {})
             }
         }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("report_q3.pdf").fetchSemanticsNodes().isNotEmpty() }
@@ -116,7 +119,7 @@ class TransfersBannerTest {
         compose.onNodeWithText(wifiOnly).assertDoesNotExist()
 
         // Mobile data with the switch off: transfers may run there, so no banner and no Wi-Fi wait.
-        settings.value = Settings(wifiOnly = false)
+        settings.value = Settings(wifiOnly = false, serverChosen = true)
         network.value = NetworkState.Metered
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Waiting, #1 in line").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(wifiOnly).assertDoesNotExist()

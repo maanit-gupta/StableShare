@@ -3,15 +3,12 @@ package com.maanit.stableshare.ui.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
@@ -102,6 +99,11 @@ import com.maanit.stableshare.ui.components.NeutralTextButton
 import com.maanit.stableshare.ui.components.OutlinedNeutralButton
 import com.maanit.stableshare.ui.components.PrimaryButton
 import com.maanit.stableshare.ui.components.SegmentedControl
+import com.maanit.stableshare.ui.components.ServerDot
+import com.maanit.stableshare.ui.components.StatusDot
+import com.maanit.stableshare.ui.components.dot
+import com.maanit.stableshare.ui.components.labelColor
+import com.maanit.stableshare.ui.nav.Routes
 import com.maanit.stableshare.ui.components.SelectChip
 import com.maanit.stableshare.ui.components.StatusBarScrim
 import com.maanit.stableshare.ui.components.neutralCard
@@ -114,11 +116,11 @@ import kotlin.math.roundToInt
 private const val MIB = 1024 * 1024
 private const val STATS_INTERVAL_MS = 2_000L
 
-/** Settings (UI-SPEC §5.10). [scrollToTransfers] opens it at the Transfers section (from the Limit pill). */
+/** Settings (UI-SPEC §5.10). [section] ([Routes.SECTION_SERVER] or [Routes.SECTION_TRANSFERS]) opens it scrolled there. */
 @Composable
 fun SettingsScreen(
     vm: SettingsViewModel,
-    scrollToTransfers: Boolean,
+    section: String?,
     onShowIntro: () -> Unit,
     onOpenLicences: () -> Unit,
 ) {
@@ -126,9 +128,14 @@ fun SettingsScreen(
     val snackbar = LocalSnackbar.current
     val resources = LocalContext.current.resources
     LaunchedEffect(vm) { vm.snackbarMessages.collect { snackbar.showSnackbar(it.resolve(resources)) } }
+    val serverSection = remember { BringIntoViewRequester() }
     val transfersSection = remember { BringIntoViewRequester() }
-    LaunchedEffect(scrollToTransfers, settings != null) {
-        if (scrollToTransfers && settings != null) transfersSection.bringIntoView()
+    LaunchedEffect(section, settings != null) {
+        if (settings == null) return@LaunchedEffect
+        when (section) {
+            Routes.SECTION_SERVER -> serverSection.bringIntoView()
+            Routes.SECTION_TRANSFERS -> transfersSection.bringIntoView()
+        }
     }
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val s = settings ?: return Box(Modifier.fillMaxSize().background(Neutral.colors.page))
@@ -142,7 +149,9 @@ fun SettingsScreen(
         ) {
             Text(stringResource(R.string.settings_title), style = Neutral.type.title)
 
-            Section(stringResource(R.string.settings_section_server), card = false) { ServerOptions(vm, s) }
+            Section(stringResource(R.string.settings_section_server), Modifier.bringIntoViewRequester(serverSection), card = false) {
+                ServerOptions(vm, s)
+            }
             Section(stringResource(R.string.settings_section_transfers), Modifier.bringIntoViewRequester(transfersSection)) {
                 Label(stringResource(R.string.settings_concurrency))
                 SegmentedControl(
@@ -298,12 +307,10 @@ private fun ServerOptions(vm: SettingsViewModel, s: Settings) {
 
     val savedOption = s.serverProfile.option()
     val status = (check as? ConnectionCheck.Result)?.health
-    val badge = when {
-        check == ConnectionCheck.Checking -> ServerDot.CHECKING
-        status is ServerHealth.Online -> ServerDot.ONLINE
-        status == ServerHealth.Waking -> ServerDot.WAKING
-        status is ServerHealth.Unreachable -> ServerDot.UNREACHABLE
-        else -> null
+    val badge = when (check) {
+        ConnectionCheck.Idle -> null
+        ConnectionCheck.Checking -> ServerDot.CHECKING
+        is ConnectionCheck.Result -> status.dot()
     }
     Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ServerOptionCard(
@@ -322,43 +329,17 @@ private fun ServerOptions(vm: SettingsViewModel, s: Settings) {
             onSelect = { picked = ServerOption.LOCAL; save() },
             tag = "serverLocal",
         ) {
-            SegmentedControl(
-                options = listOf(ServerProfile.EMULATOR, ServerProfile.LAN),
-                selected = localMode,
-                label = {
-                    stringResource(if (it == ServerProfile.EMULATOR) R.string.settings_server_emulator else R.string.settings_server_phone)
-                },
-                onSelect = { localMode = it; save() },
+            LocalServerControls(
+                mode = localMode,
+                onModeChange = { localMode = it; save() },
+                host = host,
+                onHostChange = { host = it },
+                port = port,
+                onPortChange = { port = it; portInvalid = false },
+                error = if (portInvalid) stringResource(R.string.settings_server_port_invalid) else null,
+                onDone = { save(typed = true); focus.clearFocus() },
+                onLeave = { save() },
             )
-            if (localMode == ServerProfile.LAN) {
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ServerField(
-                        value = host,
-                        onValueChange = { host = it },
-                        label = stringResource(R.string.settings_server_host),
-                        keyboardType = KeyboardType.Uri,
-                        onDone = { save(typed = true); focus.clearFocus() },
-                        onLeave = { save() },
-                        modifier = Modifier.weight(1f).testTag("lanHost"),
-                    )
-                    ServerField(
-                        value = port,
-                        onValueChange = { port = it.filter(Char::isDigit).take(5); portInvalid = false },
-                        label = stringResource(R.string.settings_server_port),
-                        keyboardType = KeyboardType.Number,
-                        onDone = { save(typed = true); focus.clearFocus() },
-                        onLeave = { save() },
-                        isError = portInvalid,
-                        modifier = Modifier.width(96.dp).testTag("lanPort"),
-                    )
-                }
-                if (portInvalid) {
-                    Text(stringResource(R.string.settings_server_port_invalid), style = Neutral.type.meta, color = Neutral.colors.danger)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.settings_server_local_helper), style = Neutral.type.meta)
         }
         ServerOptionCard(
             title = stringResource(R.string.settings_server_custom),
@@ -404,26 +385,64 @@ private fun ServerOptions(vm: SettingsViewModel, s: Settings) {
     }
 }
 
-/** The status dot's states (UI-SPEC §12.1); an invalid address shows no dot. */
-private enum class ServerDot { CHECKING, ONLINE, WAKING, UNREACHABLE }
-
+/**
+ * The Local card's controls (UI-SPEC §12.2): Emulator or Phone on Wi-Fi, then the computer's
+ * address and port for a phone. [error] shows below the fields; [onLeave] runs when a field loses focus.
+ */
 @Composable
-private fun ServerDot.color(): Color = when (this) {
-    ServerDot.CHECKING -> Neutral.colors.muted
-    ServerDot.ONLINE -> Neutral.colors.success
-    ServerDot.WAKING -> Neutral.colors.warning
-    ServerDot.UNREACHABLE -> Neutral.colors.danger
-}
-
-@Composable
-private fun StatusDot(dot: ServerDot) {
-    val fill by animateColorAsState(dot.color(), Motion.quick(), label = "statusDot")
-    Box(Modifier.size(8.dp).background(fill, CircleShape))
+internal fun LocalServerControls(
+    mode: ServerProfile,
+    onModeChange: (ServerProfile) -> Unit,
+    host: String,
+    onHostChange: (String) -> Unit,
+    port: String,
+    onPortChange: (String) -> Unit,
+    error: String?,
+    onDone: () -> Unit,
+    onLeave: () -> Unit = {},
+) {
+    SegmentedControl(
+        options = listOf(ServerProfile.EMULATOR, ServerProfile.LAN),
+        selected = mode,
+        label = {
+            stringResource(if (it == ServerProfile.EMULATOR) R.string.settings_server_emulator else R.string.settings_server_phone)
+        },
+        onSelect = onModeChange,
+    )
+    if (mode == ServerProfile.LAN) {
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ServerField(
+                value = host,
+                onValueChange = onHostChange,
+                label = stringResource(R.string.settings_server_host),
+                keyboardType = KeyboardType.Uri,
+                onDone = onDone,
+                onLeave = onLeave,
+                modifier = Modifier.weight(1f).testTag("lanHost"),
+            )
+            ServerField(
+                value = port,
+                onValueChange = { onPortChange(it.filter(Char::isDigit).take(5)) },
+                label = stringResource(R.string.settings_server_port),
+                keyboardType = KeyboardType.Number,
+                onDone = onDone,
+                onLeave = onLeave,
+                isError = error != null,
+                modifier = Modifier.width(96.dp).testTag("lanPort"),
+            )
+        }
+        if (error != null) {
+            Text(error, style = Neutral.type.meta, color = Neutral.colors.danger)
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(stringResource(R.string.settings_server_local_helper), style = Neutral.type.meta)
 }
 
 /** One selectable server card (UI-SPEC §12.2); [expanded] renders below the subtitle only while selected. */
 @Composable
-private fun ServerOptionCard(
+internal fun ServerOptionCard(
     title: String,
     subtitle: String,
     selected: Boolean,
@@ -465,18 +484,7 @@ private fun ServerOptionCard(
                     if (selected && badge != null) {
                         StatusDot(badge)
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            stringResource(
-                                when (badge) {
-                                    ServerDot.CHECKING -> R.string.settings_checking
-                                    ServerDot.ONLINE -> R.string.server_status_online
-                                    ServerDot.WAKING -> R.string.server_status_waking
-                                    ServerDot.UNREACHABLE -> R.string.server_status_unreachable
-                                },
-                            ),
-                            style = Neutral.type.status,
-                            color = if (badge == ServerDot.CHECKING) c.inkTertiary else badge.color(),
-                        )
+                        Text(stringResource(badge.label), style = Neutral.type.status, color = badge.labelColor())
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -498,7 +506,7 @@ private fun ServerOptionCard(
 
 /** A Settings text field (UI-SPEC §5.10). [onLeave] runs when focus leaves it. */
 @Composable
-private fun ServerField(
+internal fun ServerField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
@@ -563,11 +571,7 @@ private fun ConnectionStatusLine(check: ConnectionCheck) {
         Text(
             text,
             style = Neutral.type.status,
-            color = when (dot) {
-                null -> c.danger
-                ServerDot.CHECKING -> c.inkTertiary
-                else -> dot.color()
-            },
+            color = dot?.labelColor() ?: c.danger,
         )
     }
 }
