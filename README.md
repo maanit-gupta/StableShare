@@ -16,31 +16,23 @@
   <a href="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml"><img src="https://github.com/maanit-gupta/StableShare/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads and downloads files of up to 1 GB (512 MiB on the hosted server) to a Node.js mock server, hosted at https://stableshare.onrender.com by default or run locally, and survives pause and resume, lost or flapping networks, timeouts, lost responses, server errors, app kills and restarts. Files move in SHA-256-checked pieces. Every state change is a validated compare-and-set in Room, and every retry is bounded. A transfer shows **Completed** only after the whole file has been verified end to end. The server injects faults on demand from the app's own network simulator, so you can watch all of this happen.
+StableShare is an Android app (Kotlin, Jetpack Compose, minSdk 26) that uploads and downloads files of up to 1 GB to a Node.js mock server, and survives pause and resume, flaky networks, timeouts, lost responses, server errors, app kills and restarts. Files move in SHA-256-checked pieces, every state change is a validated compare-and-set in Room, and every retry is bounded. A transfer shows **Completed** only after the whole file has been verified end to end.
+
+## Demo
+
+<p align="center">
+  <img src="docs/demo/stableshare-demo.gif" width="320" alt="StableShare demo: first launch and server choice, Try a demo, an upload and a download, pause and resume, History, switching to the local server">
+</p>
 
 | Transfers | Detail | History | Settings |
 |---|---|---|---|
 | ![Transfers](docs/screenshots/05-transfers-active.png) | ![Detail](docs/screenshots/07-detail-transferring.png) | ![History](docs/screenshots/11-history.png) | ![Settings](docs/screenshots/12-settings.png) |
 
-| First launch | Try a demo |
-|---|---|
-| ![First launch: choose Hosted or Local server](docs/screenshots/01-server-choice.png) | ![Try a demo sheet](docs/screenshots/02-try-a-demo.png) |
+## Install
 
-**Demo video:** [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4) (3:54; first launch and server choice, Try a demo, an upload and a download on the hosted server, expand a row, pause and resume, History filters and row menu, switch to the local server). See [Demo](#demo) for the 2× GIF.
+Download the [APK](https://github.com/maanit-gupta/StableShare/releases/download/v1.3.0/StableShare-1.3.0.apk) on an Android device and open it (allow installs from your browser when asked). The app connects to the hosted server at https://stableshare.onrender.com by default, so there is nothing to set up. SHA-256 and older builds are in [release/](release).
 
-<a href="docs/demo/stableshare-demo.mp4"><img src="docs/demo/stableshare-demo-thumb.jpg" width="200" alt="StableShare demo video thumbnail: an upload and a download in progress. Tap to play the recording"></a>
-
-**Download:** tap the icon or the button above, or this link: [StableShare-1.3.0.apk](https://github.com/maanit-gupta/StableShare/releases/download/v1.3.0/StableShare-1.3.0.apk) from the [v1.3.0 release](https://github.com/maanit-gupta/StableShare/releases/tag/v1.3.0) (3 963 781 bytes, v2-signed), SHA-256 `4f5d31be439fb8d05724eb4e8831a63e68b84ae590764c2e96f597785afd1687` ([CHECKSUMS.txt](release/CHECKSUMS.txt)). The same APK is in the repository at [release/StableShare-1.3.0.apk](release/StableShare-1.3.0.apk). The previous [1.2.0](release/StableShare-1.2.0.apk) and [1.1.0](release/StableShare-1.1.0.apk) APKs are kept; 1.1.0 defaults to the local server.
-
-**Install on a phone:** open the link on the Android device, then open the downloaded file. Android asks you to allow installs from your browser or file manager the first time. The app connects to the hosted server by default; nothing needs to be set (see [Quick start](#quick-start)).
-
-The full design is in [docs/DESIGN.md](docs/DESIGN.md) and the UI spec is in [docs/UI-SPEC.md](docs/UI-SPEC.md).
-
-## Demo
-
-![StableShare demo: first launch and server choice, Try a demo, an upload and a download, pause and resume, History, switching to the local server](docs/demo/stableshare-demo.gif)
-
-The GIF plays at 2× speed. The full 3:54 recording at normal speed is [docs/demo/stableshare-demo.mp4](docs/demo/stableshare-demo.mp4). It was recorded on an API 37 emulator with the 1.3.0 release build against the hosted server and driven by adb ([scripts/record-demo-1.3.sh](scripts/record-demo-1.3.sh), which also takes the screenshots above). The fault-injection walkthrough from 1.2.0 (`kill -9` and restore, lost responses, airplane mode, instant re-upload, cancel) is described in [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) and can be re-recorded with [scripts/record-demo.sh](scripts/record-demo.sh).
+Design docs: [DESIGN.md](docs/DESIGN.md) and [UI-SPEC.md](docs/UI-SPEC.md).
 
 ## Features
 
@@ -119,7 +111,7 @@ The same server code runs on a Render free web service in Singapore at https://s
 - **Cleanup.** The hourly sweep removes incomplete sessions idle for more than 48 h (`SESSION_TTL_MS`; local 24 h) and, with `COMPLETED_UPLOAD_TTL_MS`, completed uploads older than 24 h together with their instant-upload index entries. Seed files are never touched.
 - **Network simulator.** Open to everyone, as locally, and off at every boot. With `FAULT_AUTO_RESET_MS`, faults left on are switched off after 30 minutes without an admin call ([server.js](server/src/server.js)). `DISABLE_FILE_MUTATE=1` removes `POST /admin/files/:id/mutate`, so nobody can rewrite the seed files ([admin.js](server/src/routes/admin.js)).
 - **Cold starts.** The free instance spins down when idle and wakes on the next request, so that request is slow. The app's read timeout is 60 s ([ProtocolClient]).
-- **Fallback.** If the hosted server is unavailable, run the [local server](#2-local-server-fallback) and set its address in Settings, or watch the [demo](#demo).
+- **Fallback.** If the hosted server is unavailable, run the [local server](#2-local-server-fallback) and set its address in Settings.
 
 ## Architecture
 
@@ -363,7 +355,7 @@ cd android && ./gradlew connectedDebugAndroidTest   # instrumented: launch + rea
 StableShare/
 ├── README.md, CHANGELOG.md, render.yaml (hosted deploy), .gitignore
 ├── .github/workflows/      ci.yml (tests on push/PR), chaos.yml (manual)
-├── docs/                   DESIGN.md, UI-SPEC.md, benchmarks.md, DEMO-SCRIPT.md, demo/, screenshots/, design/mascot/
+├── docs/                   DESIGN.md, UI-SPEC.md, benchmarks.md, DEMO-SCRIPT.md, demo/ (GIF), screenshots/, design/mascot/
 ├── release/                StableShare-1.1.0.apk, StableShare-1.2.0.apk, StableShare-1.3.0.apk, CHECKSUMS.txt
 ├── scripts/                demo recording helpers
 ├── server/

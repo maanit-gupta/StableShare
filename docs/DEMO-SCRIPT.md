@@ -1,6 +1,6 @@
 # Demo video script
 
-Recorded on the API 37 emulator (`emulator-5554`) running the signed release 1.1.0, against the mock server at `http://10.0.2.2:8080`. `scripts/record-demo.sh` drives every beat with adb; nobody touches the screen. Output: `docs/demo/stableshare-demo.mp4` (real time, 5 min 39 s) and `docs/demo/stableshare-demo.gif` (2× speed).
+Recorded on the API 37 emulator (`emulator-5554`) running the signed release 1.1.0, against the mock server at `http://10.0.2.2:8080`. `scripts/record-demo.sh` drives every beat with adb; nobody touches the screen. Output: a real-time `demo.mp4` (5 min 39 s), not kept in the repository.
 
 ## Setup (off camera)
 
