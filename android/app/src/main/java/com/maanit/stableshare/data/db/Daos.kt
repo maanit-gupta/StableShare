@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.Flow
  * TransferRepository, which wraps multi-row changes in a transaction.
  */
 
+/** A per-transfer count from a GROUP BY query. */
+data class TransferCount(val transferId: String, val count: Int)
+
 @Dao
 abstract class TransferDao {
 
@@ -120,6 +123,10 @@ abstract class ChunkDao {
     @Query("SELECT * FROM chunks WHERE transferId = :id ORDER BY `index`")
     abstract suspend fun getAll(id: String): List<ChunkEntity>
 
+    /** DONE chunks per transfer, for the Transfers card details (UI-SPEC §12.6). */
+    @Query("SELECT transferId, COUNT(*) AS count FROM chunks WHERE status = 'DONE' GROUP BY transferId")
+    abstract fun observeDoneCounts(): Flow<List<TransferCount>>
+
     @Query("SELECT * FROM chunks WHERE transferId = :id AND `index` = :index")
     abstract suspend fun get(id: String, index: Int): ChunkEntity?
 
@@ -188,6 +195,13 @@ abstract class EventDao {
     /** Every transfer with an INSTANT_UPLOAD event, for the "Already on server" pill on list rows. */
     @Query("SELECT DISTINCT transferId FROM transfer_events WHERE type = 'INSTANT_UPLOAD'")
     abstract fun observeInstantUploadIds(): Flow<List<String>>
+
+    /** Resumes per transfer: STATE_CHANGE events from PAUSED to QUEUED (UI-SPEC §12.6). */
+    @Query(
+        "SELECT transferId, COUNT(*) AS count FROM transfer_events " +
+            "WHERE type = 'STATE_CHANGE' AND fromState = 'PAUSED' AND toState = 'QUEUED' GROUP BY transferId",
+    )
+    abstract fun observeResumeCounts(): Flow<List<TransferCount>>
 
     @Insert
     internal abstract suspend fun insert(event: TransferEventEntity): Long

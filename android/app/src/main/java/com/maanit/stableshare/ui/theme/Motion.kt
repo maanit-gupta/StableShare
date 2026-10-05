@@ -6,6 +6,7 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
@@ -22,10 +23,14 @@ object Motion {
     const val QUICK_MS = 150
     const val STANDARD_MS = 250
     const val LONG_MS = 600
+    const val PROGRESS_MS = 300
 
     fun <T> quick(): FiniteAnimationSpec<T> = tween(QUICK_MS, easing = FastOutSlowInEasing)
     fun <T> standard(): FiniteAnimationSpec<T> = tween(STANDARD_MS, easing = FastOutSlowInEasing)
     fun <T> emphasis(): FiniteAnimationSpec<T> = spring(dampingRatio = 0.7f, stiffness = 300f)
+
+    /** Progress bars easing between updates (UI-SPEC §12.6). */
+    fun <T> progress(): FiniteAnimationSpec<T> = tween(PROGRESS_MS, easing = LinearEasing)
 }
 
 /**

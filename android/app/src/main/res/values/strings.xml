@@ -66,6 +66,20 @@
     <string name="row_size_progress">%1$s of %2$s</string>
     <string name="row_live">%1$s, %2$s left</string>
     <string name="row_restored">Restored after restart</string>
+    <!-- §12.6 Active card details -->
+    <plurals name="row_details_pieces">
+        <item quantity="one">%1$d of %2$d piece</item>
+        <item quantity="other">%1$d of %2$d pieces</item>
+    </plurals>
+    <plurals name="row_details_retries">
+        <item quantity="one">%1$d retry</item>
+        <item quantity="other">%1$d retries</item>
+    </plurals>
+    <plurals name="row_details_resumed">
+        <item quantity="one">Resumed %1$d time</item>
+        <item quantity="other">Resumed %1$d times</item>
+    </plurals>
+    <string name="row_view_details">View details</string>
     <string name="row_instant">Already on server</string>
     <string name="cd_pause">Pause %1$s</string>
     <string name="cd_resume">Resume %1$s</string>

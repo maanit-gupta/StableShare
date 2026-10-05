@@ -150,6 +150,7 @@ Use sentence case everywhere. No all-caps text except file extensions inside fil
 | `standard` | 250 ms | FastOutSlowIn |
 | `emphasis` | 400 ms | spring(dampingRatio 0.7, stiffness 300) |
 | `long` | 600 ms | FastOutSlowIn |
+| `progress` | 300 ms | Linear (progress bars easing between updates; instant with reduced motion) |
 
 ## 4. Mascot system
 
@@ -763,3 +764,15 @@ Server status reuses existing faces (4.1). No new mascot art.
 - **Sheet:** the "New transfer" chooser sheet (5.4.4) titled "Try a demo", with three option rows (72 dp minimum height, 12 dp vertical padding so two-line subtitles fit). While one demo runs, every row is disabled (title in `neutral.inkTertiary`). The running row swaps its subtitle for "Making test file…" with a 4 dp `ProgressBar` (accent fill) 8 dp below, or "Waking the server…" while the hosted server wakes. The sheet closes once the transfer exists. Errors show in the sheet's own snackbar, as in 5.7.
 - **Demo pill:** the 20 dp `neutral.pill` badge used by "Already on server" (5.4.1), text "Demo", 4 dp below the previous line, on transfer rows and History rows.
 - **Tip:** inside the Big upload's transfer card, 12 dp below the progress bar: `neutral.pill` fill, 12 dp radius, 12 dp padding (4 dp at the end so the button's touch target lines up), text in `neutral.body`, with the "Got it" text button (as above) aligned to the end. No icon, no motion.
+
+### 12.6 Transfers screen interaction
+
+- **Nimbus tap (empty state):** tapping the idle Nimbus plays the happy mood's arrival wave once (right arm ±12° three times, 3.6 s, as COMPLETED in 4.1), then returns to idle. Taps during the wave are ignored. No reaction while the server is waking (12.4). Reduced motion: the faces still cross-fade; no wave. Nimbus stays decorative.
+- **Active card details:** tapping a card in the Active section (outside its buttons) toggles a details block open in place. This replaces "tapping a row opens Detail" in 5.4.1 for Active cards only; Waiting and Needs attention cards still open Detail. Only one card is open at a time.
+  - Below the progress bar (and above the demo tip, if shown): 12 dp gap, a 1 dp `neutral.border` divider, 12 dp gap.
+  - Fact lines in `neutral.meta`, 4 dp apart: "{done} of {total} pieces", "{retries} retries", "Resumed {n} times", and the current speed while transferring. A fact the engine doesn't have is left out; zero-byte files have no pieces line.
+  - A "View details" text button (14 sp SemiBold `neutral.inkPrimary`, 48 dp touch target) aligned to the end opens Detail.
+  - Card fill, radius, padding and shadow do not change. Height animates over `standard`; with reduced motion it changes instantly.
+  - Accessibility: the card exposes a state description of expanded or collapsed.
+- **Haptics:** `HapticFeedbackConstants.CLOCK_TICK` on Pause and Resume; on a transfer reaching Verified (COMPLETED) while the screen is visible, `CONFIRM` on API 30+, else `KEYBOARD_TAP` (as the throw's "+1", 5.6).
+- **Progress bar:** the fill eases between updates over `progress` (3.5).

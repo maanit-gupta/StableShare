@@ -1,8 +1,11 @@
 package com.maanit.stableshare.ui.transfers
 
+import android.os.Build
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,8 +54,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -64,6 +70,7 @@ import com.maanit.stableshare.data.net.ServerHealth
 import com.maanit.stableshare.data.settings.ServerProfile
 import com.maanit.stableshare.data.settings.SettingsRepository
 import com.maanit.stableshare.domain.TransferAction
+import com.maanit.stableshare.domain.TransferState
 import com.maanit.stableshare.engine.NetworkState
 import com.maanit.stableshare.ui.components.Banner
 import com.maanit.stableshare.ui.components.CancelTransferDialog
@@ -113,6 +120,9 @@ fun TransfersScreen(
     var serverChoice by rememberSaveable { mutableStateOf(false) }
     var demo by rememberSaveable { mutableStateOf(false) }
     var cancelTarget by remember { mutableStateOf<TransferItem?>(null) }
+    /** The one Active card showing its details (UI-SPEC §12.6). */
+    var expandedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val view = LocalView.current
 
     // Health on resume (at most once per 30 s, the ViewModel throttles) and while visible.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -133,7 +143,20 @@ fun TransfersScreen(
     }
 
     val onAction: (TransferItem, TransferAction) -> Unit = { item, action ->
+        if (action == TransferAction.PAUSE || action == TransferAction.RESUME) view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         if (action == TransferAction.CANCEL) cancelTarget = item else vm.perform(item.id, action)
+    }
+    val onToggle: (String) -> Unit = { id -> expandedId = id.takeIf { it != expandedId } }
+
+    // Success haptic once per transfer that reaches Verified on this screen (only those linger in Active).
+    val verified = ui.active.filter { it.state == TransferState.COMPLETED }.map { it.id }
+    val celebrated = remember { HashSet<String>() }
+    LaunchedEffect(verified) {
+        if (celebrated.addAll(verified)) {
+            view.performHapticFeedback(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.KEYBOARD_TAP,
+            )
+        }
     }
 
     Box(Modifier.fillMaxSize().background(Neutral.colors.page)) {
@@ -161,7 +184,7 @@ fun TransfersScreen(
                         BannerSlot(network, ui.wifiOnly, reachable, ui.serverUrl, onOpenSettings)
                     }
                 }
-                section("active", R.string.section_active, ui.active, ui, onOpenDetail, onAction, vm::dismissTip)
+                section("active", R.string.section_active, ui.active, ui, onOpenDetail, onAction, vm::dismissTip, expandedId, onToggle)
                 section("waiting", R.string.section_waiting, ui.waiting, ui, onOpenDetail, onAction, vm::dismissTip)
                 section("attention", R.string.section_attention, ui.attention, ui, onOpenDetail, onAction, vm::dismissTip)
             }
@@ -282,6 +305,9 @@ private fun LazyListScope.section(
     onOpen: (String) -> Unit,
     onAction: (TransferItem, TransferAction) -> Unit,
     onDismissTip: () -> Unit,
+    expandedId: String? = null,
+    /** Set for Active: tapping a card toggles its details instead of opening Detail. */
+    onToggle: ((String) -> Unit)? = null,
 ) {
     if (items.isEmpty()) return
     item(key = "section-$key") {
@@ -298,7 +324,7 @@ private fun LazyListScope.section(
         TransferRow(
             item = item,
             generated = item.id in ui.generated,
-            onOpen = { onOpen(item.id) },
+            onOpen = { if (onToggle != null) onToggle(item.id) else onOpen(item.id) },
             onAction = { onAction(item, it) },
             demo = item.id in ui.demo,
             tip = if (item.id == ui.tipFor) {
@@ -306,6 +332,8 @@ private fun LazyListScope.section(
             } else {
                 null
             },
+            details = onToggle?.let { { ActiveDetails(item, ui, onViewDetails = { onOpen(item.id) }) } },
+            expanded = item.id == expandedId,
             modifier = Modifier
                 .animateItem(
                     fadeInSpec = if (reduced) null else tween(Motion.STANDARD_MS),
@@ -317,13 +345,61 @@ private fun LazyListScope.section(
     }
 }
 
-/** Empty state (UI-SPEC §5.4.3); while the hosted server wakes, Nimbus searches (§12.4). */
+/** The Active card's details block (UI-SPEC §12.6): only facts the engine already tracks, then "View details". */
+@Composable
+private fun ActiveDetails(item: TransferItem, ui: TransfersUi, onViewDetails: () -> Unit) {
+    val total = item.row.totalChunks
+    val retries = item.row.attemptCount
+    val resumes = ui.resumes[item.id] ?: 0
+    val facts = buildList {
+        if (total > 0) add(pluralStringResource(R.plurals.row_details_pieces, total, ui.donePieces[item.id] ?: 0, total))
+        add(pluralStringResource(R.plurals.row_details_retries, retries, retries))
+        add(pluralStringResource(R.plurals.row_details_resumed, resumes, resumes))
+        Format.speed(item.liveSpeed)?.let(::add)
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            facts.forEach { Text(it, style = Neutral.type.meta) }
+        }
+        NeutralTextButton(
+            stringResource(R.string.row_view_details),
+            onClick = onViewDetails,
+            color = Neutral.colors.inkPrimary,
+            modifier = Modifier.align(Alignment.End),
+        )
+    }
+}
+
+/** The happy mood's arrival wave (three 1.2 s waves, see Mascot). */
+private const val NIMBUS_CHEER_MS = 3 * 1_200L
+
+/**
+ * Empty state (UI-SPEC §5.4.3); while the hosted server wakes, Nimbus searches (§12.4).
+ * Tapping the idle Nimbus waves once (§12.6); taps during the wave are ignored.
+ */
 @Composable
 private fun EmptyState(waking: Boolean, onUpload: () -> Unit, onDownload: () -> Unit, onDemo: () -> Unit, modifier: Modifier = Modifier) {
+    var cheering by remember { mutableStateOf(false) }
+    LaunchedEffect(cheering) {
+        if (cheering) {
+            delay(NIMBUS_CHEER_MS)
+            cheering = false
+        }
+    }
+    val mood = when {
+        waking -> MascotMood.SEARCHING
+        cheering -> MascotMood.HAPPY
+        else -> MascotMood.IDLE
+    }
     Box(modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.padding(top = 24.dp)) {
-                MascotIllustration(if (waking) MascotMood.SEARCHING else MascotMood.IDLE, 140.dp, plane = CloudPlane.Perched)
+                MascotIllustration(
+                    mood,
+                    140.dp,
+                    plane = CloudPlane.Perched,
+                    modifier = Modifier.pointerInput(waking) { detectTapGestures { if (!waking) cheering = true } },
+                )
             }
             Spacer(Modifier.height(16.dp))
             Text(stringResource(R.string.empty_title), style = Neutral.type.heading, textAlign = TextAlign.Center)

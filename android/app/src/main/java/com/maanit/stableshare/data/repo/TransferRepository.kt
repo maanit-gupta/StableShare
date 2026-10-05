@@ -416,6 +416,8 @@ class TransferRepository(
     fun observeHistory(): Flow<List<TransferEntity>> = transfers.observeHistory()
     fun observeHasInstantUpload(id: String): Flow<Boolean> = events.observeHasInstantUpload(id)
     fun observeInstantUploadIds(): Flow<Set<String>> = events.observeInstantUploadIds().map { it.toSet() }
+    fun observeDoneChunkCounts(): Flow<Map<String, Int>> = chunks.observeDoneCounts().map { rows -> rows.associate { it.transferId to it.count } }
+    fun observeResumeCounts(): Flow<Map<String, Int>> = events.observeResumeCounts().map { rows -> rows.associate { it.transferId to it.count } }
 
     suspend fun getTransfer(id: String): TransferEntity? = transfers.get(id)
     suspend fun getChunks(id: String): List<ChunkEntity> = chunks.getAll(id)

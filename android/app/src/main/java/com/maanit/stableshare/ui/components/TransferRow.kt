@@ -1,6 +1,11 @@
 package com.maanit.stableshare.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,14 +88,21 @@ fun TransferRow(
     demo: Boolean = false,
     /** Shown below the progress bar (the Big upload demo's tip). */
     tip: (@Composable () -> Unit)? = null,
+    /** Active cards (UI-SPEC §12.6): a details block under the progress bar, shown while [expanded]. */
+    details: (@Composable () -> Unit)? = null,
+    expanded: Boolean = false,
 ) {
     val c = Neutral.colors
     val label = StatePresentation.listLabel(item, MAX_TRIES).text()
+    val stateText = progressStateDescription(label, item.percent)
+    val expansion = stringResource(if (expanded) R.string.state_expanded else R.string.state_collapsed)
     Column(
         modifier
             .fillMaxWidth()
             .neutralCard()
             .clickable(onClick = onOpen)
+            // The card merges the bar's semantics; its own state description would hide the bar's, so say both.
+            .then(if (details != null) Modifier.semantics { stateDescription = "$stateText, $expansion" } else Modifier)
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
@@ -143,7 +155,6 @@ fun TransferRow(
             }
         }
         Spacer(Modifier.height(6.dp))
-        val stateText = progressStateDescription(label, item.percent)
         ProgressBar(
             StatePresentation.barFraction(item),
             StatePresentation.barFill(item.condition),
@@ -152,6 +163,21 @@ fun TransferRow(
                 stateDescription = stateText
             },
         )
+        if (details != null) {
+            val reduced = LocalReducedMotion.current
+            AnimatedVisibility(
+                expanded,
+                enter = if (reduced) EnterTransition.None else expandVertically(Motion.standard()),
+                exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.standard()),
+            ) {
+                Column {
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
+                    Spacer(Modifier.height(12.dp))
+                    details()
+                }
+            }
+        }
         if (tip != null) {
             Spacer(Modifier.height(12.dp))
             tip()

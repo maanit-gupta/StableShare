@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -223,7 +224,7 @@ fun NeutralColors.barColor(fill: BarFill): Color = when (fill) {
 fun ProgressBar(fraction: Float, fill: BarFill, modifier: Modifier = Modifier, height: Dp = 4.dp) {
     val c = Neutral.colors
     val reduced = LocalReducedMotion.current
-    val animated by animateFloatAsState(fraction.coerceIn(0f, 1f), Motion.standard(), label = "bar")
+    val animated by animateFloatAsState(fraction.coerceIn(0f, 1f), if (reduced) snap() else Motion.progress(), label = "bar")
     val pulse = if (fill == BarFill.ACCENT_PULSE && !reduced) {
         rememberInfiniteTransition(label = "pulse")
             .animateFloat(0.6f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "pulse").value

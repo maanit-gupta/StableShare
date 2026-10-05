@@ -55,6 +55,10 @@ data class TransfersUi(
     val demo: Set<String> = emptySet(),
     /** The Big upload demo showing its one-time tip, if any. */
     val tipFor: String? = null,
+    /** DONE chunks per transfer id (the Active card details). */
+    val donePieces: Map<String, Int> = emptyMap(),
+    /** Times each transfer was resumed from PAUSED (the Active card details). */
+    val resumes: Map<String, Int> = emptyMap(),
 ) {
     val isEmpty: Boolean get() = loaded && active.isEmpty() && waiting.isEmpty() && attention.isEmpty()
 }
@@ -94,12 +98,12 @@ class TransfersViewModel(
     }
 
     val ui: StateFlow<TransfersUi> = combine(
-        combine(repo.observeTransfers(), repo.observeInstantUploadIds(), ::Pair),
+        combine(repo.observeTransfers(), repo.observeInstantUploadIds(), repo.observeDoneChunkCounts(), repo.observeResumeCounts(), ::Quad),
         tracker.progress,
         restored,
         combine(settings, networkState, demoIds, tipDismissed, ::Quad),
         ticker,
-    ) { (rows, instantIds), live, restoredIds, (s, network, demo, tipGone), now ->
+    ) { (rows, instantIds, donePieces, resumes), live, restoredIds, (s, network, demo, tipGone), now ->
         val wifiGated = TransferItem.wifiGated(s.wifiOnly, network)
         val items = TransferItem.buildAll(rows, live, restoredIds, now, wifiGated, instantIds).associateBy { it.id }
         val visible = rows.filter { visible(it, now) }
@@ -125,6 +129,8 @@ class TransfersViewModel(
             generated = rows.filter { it.type == TransferType.UPLOAD && isGenerated(it) }.mapTo(HashSet()) { it.id },
             demo = demo,
             tipFor = if (tipGone) null else (active + queued + paused).firstOrNull { showsTip(it, demo) }?.id,
+            donePieces = donePieces,
+            resumes = resumes,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransfersUi())
 
