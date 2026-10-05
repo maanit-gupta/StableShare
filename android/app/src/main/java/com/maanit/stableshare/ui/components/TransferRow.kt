@@ -96,11 +96,12 @@ fun TransferRow(
     val label = StatePresentation.listLabel(item, MAX_TRIES).text()
     val stateText = progressStateDescription(label, item.percent)
     val expansion = stringResource(if (expanded) R.string.state_expanded else R.string.state_collapsed)
+    val clickLabel = if (details != null) stringResource(if (expanded) R.string.history_hide_details else R.string.history_show_details) else null
     Column(
         modifier
             .fillMaxWidth()
             .neutralCard()
-            .clickable(onClick = onOpen)
+            .clickable(onClickLabel = clickLabel, onClick = onOpen)
             // The card merges the bar's semantics; its own state description would hide the bar's, so say both.
             .then(if (details != null) Modifier.semantics { stateDescription = "$stateText, $expansion" } else Modifier)
             .padding(16.dp),
