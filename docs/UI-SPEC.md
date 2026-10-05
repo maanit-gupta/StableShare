@@ -694,3 +694,65 @@ These are intentional, and Claude Code must not "correct" them back.
 6. **Hoop layout** is restacked for portrait phones (header, drop zone with hoop, test-file chips, rows, launch pad and button).
 7. **Counter pill** shows uploads in the queue rather than a demo score, and the demo's reset loop is dropped.
 8. **Upload start:** tapping Upload replaces the drag-and-flick gesture; the throw plays automatically.
+
+## 12. UI update v1.3
+
+Additions for server choice, server status and expandable History rows. Everything here reuses the tokens in section 3; nothing below introduces a new colour, font, radius or shadow. Neutral style throughout.
+
+### 12.1 Server status dot
+
+An 8 dp filled circle, no border, no glow, no shadow, no animation other than a `quick` colour cross-fade when the state changes.
+
+| State | Dot fill | Label colour (when a label is shown) |
+|---|---|---|
+| Not checked yet / checking | `neutral.muted` | `neutral.inkTertiary` |
+| Online | `neutral.success` | `neutral.success` |
+| Waking | `neutral.warning` | `neutral.warning` |
+| Unreachable | `neutral.danger` | `neutral.danger` |
+
+- Waking uses `neutral.warning` (not `neutral.warningFill`) for the dot so it keeps 3:1 contrast against `neutral.card`.
+- Labels next to the dot use `neutral.status` in the colour above, 8 dp after the dot, vertically centred.
+- Colour is never the only signal (section 10): wherever the dot appears, the state name is either shown beside it or set as the containing element's state description.
+- Invalid addresses show no dot.
+
+### 12.2 Server option card
+
+A selectable card used for each server choice, both inside the Settings Server section and in sheets.
+
+- Shape: `neutral.card` fill, 16 dp radius, no shadow, 16 dp padding, minimum height 72 dp. Cards in a group are 12 dp apart.
+- Unselected: 1 dp `neutral.border` outline.
+- Selected: 1.5 dp `neutral.inkPrimary` outline (the Neutral outlined button's border).
+- Layout (horizontal): a radio indicator (Material `RadioButton`, selected `neutral.inkPrimary`, unselected `neutral.inkSecondary`), 12 dp gap, then a text column (weight 1) with the title in `neutral.rowTitle` and the subtitle in `neutral.meta`, 4 dp below. Top-aligned.
+- Status: the selected card may show the status dot and label (12.1) at the end of its title line. Unselected cards never show status.
+- Expanded content: some options reveal controls when selected (a segmented control, address fields). They sit 12 dp below the subtitle, inside the same card, and only render while the card is selected. Height animates over `standard`; with reduced motion it changes instantly.
+  - Segmented control: identical to the Settings segmented controls (5.10): 44 dp tall, 12 dp radius, selected segment `neutral.inkPrimary` with white text.
+  - Text fields: identical to the Settings text field (5.10): outlined, 12 dp radius, `neutral.border` outline, focused outline `neutral.inkPrimary`; errors as supporting text in `neutral.danger`.
+- Interaction: the whole card is one `selectable` node with `Role.RadioButton`, grouped with `selectableGroup()`. Tapping anywhere on it selects it; controls inside the expanded content keep their own touch handling.
+
+### 12.3 Expandable History card
+
+- Collapsed: exactly the History row in 5.9, unchanged.
+- Tapping the row toggles it open in place. This replaces "tapping a row opens Detail" in 5.9. Only one row is open at a time; opening another closes the previous one.
+- Expanded: the same card grows to add a details block below the status line:
+  - 12 dp gap, a 1 dp `neutral.border` divider, 12 dp gap.
+  - Full SHA-256 in `neutral.hash`, wrapped across lines (never truncated), with a text button beside or below it styled like the banner's "Settings" button (5.4): 14 sp SemiBold `neutral.inkPrimary`, underlined, 48 dp touch target.
+  - Fact lines in `neutral.meta`, 4 dp apart.
+  - For instant uploads, an explanation line in `neutral.body` below the facts, 8 dp gap.
+- Card fill, radius, padding and shadow do not change when expanded.
+- Motion: height animates over `standard` (`animateContentSize`); with reduced motion it changes instantly. No other entrance motion on the details block.
+- Accessibility: the row exposes a state description of expanded or collapsed and an `onClick` label naming the action.
+
+### 12.4 Mascot moods for server status
+
+Server status reuses existing faces (4.1). No new mascot art.
+
+| Server state | Face | Right arm | Extra | Plane | Idle motion |
+|---|---|---|---|---|---|
+| Not checked yet | idle | wave | none | Perched on the cloud | As 5.4.3 |
+| Waking | searching | rest | none | Perched on the cloud | Face slides ±4 dp left/right (2 s loop), as RETRYING with no network |
+| Online | happy | wave | none | Perched on the cloud | Right arm waves ±12° three times on arrival, then rests raised, as COMPLETED |
+| Unreachable | sad | rest | none (no `mascot_rain`; rain stays FAILED-only) | Perched on the cloud | None |
+
+- Used by the first-run server sheet (all four rows) and the Transfers empty state (Waking only; every other state keeps the 5.4.3 empty-state mascot).
+- Face and arm changes cross-fade over `quick`, as in 4.1. Reduced motion follows section 10: no slide or wave; moods still cross-fade.
+- These instances are decorative on Neutral screens (`contentDescription = null`, 4.2). The server state is always available as text through the status dot label (12.1) on the same screen.
