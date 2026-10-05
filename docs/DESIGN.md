@@ -755,4 +755,4 @@ The server also runs publicly at `https://stableshare.onrender.com` (Render free
 
 The OkHttp read timeout is 60 s (connect 10 s, write 30 s) to absorb cold starts and slow uplinks.
 
-The UI that sits on this engine is specified in [UI-SPEC.md](UI-SPEC.md) and summarised in the [README](../README.md#11-ui-and-design).
+The UI that sits on this engine is specified in [UI-SPEC.md](UI-SPEC.md) and summarised in the [README](../README.md) (screenshots and demo at the top).

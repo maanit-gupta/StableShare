@@ -332,7 +332,7 @@ Test classes are under [android/app/src/test](android/app/src/test/java/com/maan
 ```sh
 cd server && npm test                       # 47 tests: protocol, ranges, restart, faults, instant upload, concurrency
 cd server && npm run chaos                  # CLI client, 200 MB up + down under faults, kill -9 and resume
-cd android && ./gradlew :app:testDebugUnitTest   # 350 JVM tests (Room, engine, Compose UI under Robolectric)
+cd android && ./gradlew :app:testDebugUnitTest   # 362 JVM tests (Room, engine, Compose UI under Robolectric)
 cd android && ./gradlew :app:testDebugUnitTest --tests '*fuzz*' -Pfuzz.seeds=2000   # deep fuzz run
 cd android && ./gradlew :app:testDebugUnitTest --tests '*fuzz*' -Pfuzz.seed=1346    # replay one seed
 cd android && ./gradlew connectedDebugAndroidTest   # instrumented: launch + real system-picker upload (needs the server)
@@ -361,7 +361,7 @@ cd android && ./gradlew connectedDebugAndroidTest   # instrumented: launch + rea
 
 ```
 StableShare/
-├── README.md, CHANGELOG.md, .gitignore
+├── README.md, CHANGELOG.md, render.yaml (hosted deploy), .gitignore
 ├── .github/workflows/      ci.yml (tests on push/PR), chaos.yml (manual)
 ├── docs/                   DESIGN.md, UI-SPEC.md, benchmarks.md, DEMO-SCRIPT.md, demo/, screenshots/, design/mascot/
 ├── release/                StableShare-1.1.0.apk, StableShare-1.2.0.apk, StableShare-1.3.0.apk, CHECKSUMS.txt
@@ -369,7 +369,8 @@ StableShare/
 ├── server/
 │   ├── src/                app.js, server.js, routes/ (uploads, files, admin), faults.js, storage.js, locks.js
 │   ├── scripts/            seed.js, cli-client.js, chaos-test.sh
-│   ├── .env.example        optional settings (port, storage dir, chunk size, session TTL)
+│   ├── .env.example        optional settings (port, storage dir, chunk size, session TTL, hosting)
+│   ├── Dockerfile          image for the hosted server (entrypoint.sh)
 │   └── test/               uploads, files, faults, instant, concurrency
 └── android/
     ├── scripts/            benchmark-parallel.sh (docs/benchmarks.md)

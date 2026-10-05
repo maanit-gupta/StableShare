@@ -16,6 +16,17 @@ UI update only. The transfer protocol, chunking, the transfers schema, schedulin
 ### Changed
 - Polish and device pass across the new screens (1598e08).
 
+## 1.2.0 (versionCode 3), 2026-10-04
+
+APK: `release/StableShare-1.2.0.apk`, 3 807 321 bytes, SHA-256 `6569424a726472a76cc954300992a4f6f0382b2a0ab2bb95596a4845af95b0af`. Not published as a GitHub release; the APK is in the repository.
+
+### Added
+- **Hosted server** at https://stableshare.onrender.com (Render free web service), built from `server/Dockerfile` and configured by `render.yaml` (e3bee03, 48d5fe7).
+- **Env-gated server options for hosting**, all off by default: `SEED_ON_START`, `SEED_MAX_BYTES`, `MAX_UPLOAD_BYTES` (413 `FILE_TOO_LARGE`), `COMPLETED_UPLOAD_TTL_MS`, `FAULT_AUTO_RESET_MS` and `DISABLE_FILE_MUTATE` (fc44da2, 2652ded).
+
+### Changed
+- The app defaults to the hosted server, and OkHttp's read timeout is 60 s (was 30 s) to cover cold starts and slow pieces (3869841).
+
 ## 1.1.0 (versionCode 2), 2026-10-04
 
 APK: `release/StableShare-1.1.0.apk`, 3 807 237 bytes, v2-signed, SHA-256 `b8e4179498644c2b77f9a4056a347535bb47d3615590e113e8913224f451e4e0`.
