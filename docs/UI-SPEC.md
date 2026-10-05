@@ -526,7 +526,7 @@ Below the hero, in a column with 16 dp gaps and 20 dp side margins. Each card: `
 
 ### 5.9 History (Neutral)
 
-- Title "History" (`neutral.title`). Top-right text button "Clear all" (`neutral.danger`), shown when the list is not empty; it opens the dialog "Clear history?" / "This removes finished and cancelled transfers from the list. Downloaded files stay on your phone." with buttons "Keep" and "Clear".
+- Title "History" (`neutral.title`). Top-right text button "Clear all" (`neutral.danger`), shown when the list is not empty; it opens the dialog "Clear history?" / "This removes the list only. Files aren't deleted." with buttons "Cancel" and "Clear" (12.7).
 - Filter chips 16 dp below the title: "All", "Completed", "Cancelled" (32 dp tall; selected chip filled `neutral.inkPrimary` with white label; unselected `neutral.pill` with `neutral.inkPrimary` label).
 - Rows: the shared row layout without action buttons or progress bar. Lines: name; "{size}, took {duration}, averaged {speed}" (`neutral.meta`); finish time (`neutral.meta`, "MMM d, HH:mm"); the "Already on server" pill (5.4.1) for instant uploads, 4 dp below. Status line: "Verified" in `neutral.success` with the 24 dp check badge, plus the first 8 and last 4 hex characters of the SHA-256 in `neutral.hash` ("a3f9c2b1…c21e"); or "Cancelled" in `neutral.inkTertiary` with a 24 dp `neutral.pill` circle containing `close` in `neutral.inkSecondary`.
 - An overflow icon button (`more_vert`) per row with "Open file" and "Share file" (completed downloads only, through a configured `FileProvider`) and "Remove from history".
@@ -776,3 +776,13 @@ Server status reuses existing faces (4.1). No new mascot art.
   - Accessibility: the card exposes a state description of expanded or collapsed.
 - **Haptics:** `HapticFeedbackConstants.CLOCK_TICK` on Pause and Resume; on a transfer reaching Verified (COMPLETED) while the screen is visible, `CONFIRM` on API 30+, else `KEYBOARD_TAP` (as the throw's "+1", 5.6).
 - **Progress bar:** the fill eases between updates over `progress` (3.5).
+
+### 12.7 History interaction
+
+- **Filter chips:** labels carry the count of rows in that filter, one space after the word: "All 12", "Completed 10", "Cancelled 2". Rows waiting on an Undo are not counted.
+- **Day headers:** rows are grouped by the local date they finished, newest first, under a header: "Today", "Yesterday", then "MMM d" ("Oct 4"). Header text as the section header in 5.4 (`neutral.rowTitle` in `neutral.inkSecondary`), no count, 16 dp above (none above the first), 8 dp below. Rows inside a group stay 12 dp apart.
+- **Expand:** as 12.3. Copy button label "Copy" → snackbar "Hash copied". Fact lines: "Started {MMM d, HH:mm}", "Finished {MMM d, HH:mm}", "{n} pieces" (left out for zero-byte files), "{n} retries" (the transfer's attempt count). No hash block when the row has no SHA-256. Instant uploads add "The server already had this file, so nothing was sent again."
+- **Overflow menu (`more_vert`):** "Open file" and "Share file" (completed downloads, as 5.9), "Copy hash" (rows with a SHA-256), "Upload again" or "Download again", "Remove from history". "Upload again" is shown only while the original file can still be read; "Download again" only when the row has a server file ID. Either queues a new transfer exactly like the Upload screen or Download sheet, then opens Transfers; a failure shows "Couldn't add {name}. {reason}" (5.6).
+- **Swipe to remove:** swiping a row towards the start reveals a `neutral.danger` fill with the card's radius and a white 24 dp `delete` icon 24 dp from the end. Releasing past the threshold removes the row; snackbar "Removed" with action "Undo". Swiping towards the end does nothing.
+- **Undo:** "Remove from history" and swipe hide the row at once but keep it in the database until the snackbar times out or is replaced; "Undo" puts it back in place. "Clear all" does the same for every row in History at the time, whatever the filter ("History cleared" + "Undo"). Leaving the screen commits the removal.
+- **Snackbars:** 5.11 style, in the app's shared host above the bottom bar. A new snackbar replaces the one showing.

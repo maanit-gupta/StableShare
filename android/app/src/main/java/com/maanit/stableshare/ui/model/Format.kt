@@ -2,6 +2,7 @@ package com.maanit.stableshare.ui.model
 
 import java.text.NumberFormat
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -71,6 +72,10 @@ object Format {
     /** "MMM d, HH:mm" (History finish time, Details timestamps). */
     fun dateTime(epochMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
         DateTimeFormatter.ofPattern("MMM d, HH:mm", locale).format(Instant.ofEpochMilli(epochMs).atZone(zone))
+
+    /** "MMM d" (History day headers before yesterday). */
+    fun monthDay(date: LocalDate, locale: Locale = Locale.getDefault()): String =
+        DateTimeFormatter.ofPattern("MMM d", locale).format(date)
 
     private fun unitFor(bytes: Long): Int {
         var unit = 0

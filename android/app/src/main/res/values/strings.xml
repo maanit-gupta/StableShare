@@ -212,8 +212,8 @@
     <string name="history_title">History</string>
     <string name="history_clear_all">Clear all</string>
     <string name="history_clear_title">Clear history?</string>
-    <string name="history_clear_body">This removes finished and cancelled transfers from the list. Downloaded files stay on your phone.</string>
-    <string name="history_clear_keep">Keep</string>
+    <string name="history_clear_body">This removes the list only. Files aren\'t deleted.</string>
+    <string name="history_clear_cancel">Cancel</string>
     <string name="history_clear_confirm">Clear</string>
     <string name="history_filter_all">All</string>
     <string name="history_filter_completed">Completed</string>
@@ -224,6 +224,31 @@
     <string name="history_hash">%1$s…%2$s</string>
     <string name="history_empty_title">No finished transfers yet</string>
     <string name="history_empty_body">Completed and cancelled transfers will show up here.</string>
+    <!-- §12.7 History interaction -->
+    <string name="history_filter_count">%1$s %2$d</string>
+    <string name="history_today">Today</string>
+    <string name="history_yesterday">Yesterday</string>
+    <string name="history_copy">Copy</string>
+    <string name="history_hash_copied">Hash copied</string>
+    <string name="history_started">Started %1$s</string>
+    <string name="history_finished">Finished %1$s</string>
+    <plurals name="history_pieces">
+        <item quantity="one">%1$d piece</item>
+        <item quantity="other">%1$d pieces</item>
+    </plurals>
+    <plurals name="history_retries">
+        <item quantity="one">%1$d retry</item>
+        <item quantity="other">%1$d retries</item>
+    </plurals>
+    <string name="history_instant_note">The server already had this file, so nothing was sent again.</string>
+    <string name="menu_copy_hash">Copy hash</string>
+    <string name="menu_upload_again">Upload again</string>
+    <string name="menu_download_again">Download again</string>
+    <string name="history_removed">Removed</string>
+    <string name="history_cleared">History cleared</string>
+    <string name="history_undo">Undo</string>
+    <string name="history_show_details">Show details</string>
+    <string name="history_hide_details">Hide details</string>
 
     <!-- §5.10 Settings -->
     <string name="settings_title">Settings</string>

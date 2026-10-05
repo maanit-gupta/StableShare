@@ -181,9 +181,19 @@ fun StableShareRoot(
                             isGenerated = { fileStore.isGeneratedFile(it.localUri) },
                             appScope = applicationScope,
                             demoIds = demoStore.demoIds,
+                            uploadUri = transferController::uploadUri,
+                            download = transferController::download,
+                            sourceReadable = { runCatching { fileStore.querySource(it) }.isSuccess },
+                            classifier = errorClassifier,
                         )
                     }
-                    HistoryScreen(vm, onOpenDetail = { navController.navigate(Routes.detail(it)) })
+                    HistoryScreen(vm, onOpenTransfers = {
+                        navController.navigate(Routes.TRANSFERS) {
+                            popUpTo(Routes.TRANSFERS) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    })
                 }
                 composable(
                     Routes.SETTINGS,
