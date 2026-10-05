@@ -3,22 +3,24 @@ package com.maanit.stableshare.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maanit.stableshare.R
-import com.maanit.stableshare.data.net.ErrorClassifier
 import com.maanit.stableshare.data.net.FaultSettings
+import com.maanit.stableshare.data.net.ServerHealth
 import com.maanit.stableshare.data.net.ServerStats
+import com.maanit.stableshare.data.settings.ServerChoice
+import com.maanit.stableshare.data.settings.ServerProfile
+import com.maanit.stableshare.data.settings.ServerProfiles
 import com.maanit.stableshare.data.settings.Settings
 import com.maanit.stableshare.data.settings.SettingsRepository
-import com.maanit.stableshare.domain.ErrorCode
-import com.maanit.stableshare.ui.components.MAX_TRIES
-import com.maanit.stableshare.ui.model.ErrorCopy
 import com.maanit.stableshare.ui.model.UiText
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -42,19 +44,22 @@ enum class Preset(val label: Int, val faults: FaultSettings) {
 sealed interface ConnectionCheck {
     data object Idle : ConnectionCheck
     data object Checking : ConnectionCheck
-    data object Connected : ConnectionCheck
-    data class Failed(val reason: UiText) : ConnectionCheck
+
+    /** Waking (hosted, still pending) or a final result. */
+    data class Result(val health: ServerHealth) : ConnectionCheck
 }
 
 /** Settings (UI-SPEC §5.10). Every value is written straight to DataStore and applies at once. */
 class SettingsViewModel(
     private val settingsRepo: SettingsRepository,
-    private val health: suspend () -> Boolean,
+    private val checkHealth: (ServerProfile, String) -> Flow<ServerHealth>,
+    private val hasActiveTransfers: suspend () -> Boolean,
+    /** Pauses and parks the old server's transfers, saves [ServerChoice], resumes the new one's. */
+    private val switchServer: suspend (ServerChoice) -> Boolean,
     private val getFaults: suspend () -> FaultSettings,
     private val putFaults: suspend (FaultSettings) -> FaultSettings,
     private val resetFaults: suspend () -> FaultSettings,
     private val getStats: suspend () -> ServerStats,
-    private val classifier: ErrorClassifier,
 ) : ViewModel() {
 
     val settings: StateFlow<Settings?> = settingsRepo.settings
@@ -62,6 +67,12 @@ class SettingsViewModel(
 
     private val _check = MutableStateFlow<ConnectionCheck>(ConnectionCheck.Idle)
     val check: StateFlow<ConnectionCheck> = _check.asStateFlow()
+    private var checkJob: Job? = null
+
+    /** A switch waiting for "Switch server?" because transfers are active. */
+    private val _pendingSwitch = MutableStateFlow<ServerChoice?>(null)
+    val pendingSwitch: StateFlow<ServerChoice?> = _pendingSwitch.asStateFlow()
+    private var selecting: ServerChoice? = null
 
     /** Slider values; null until GET /admin/faults answered. */
     private val _faults = MutableStateFlow<FaultSettings?>(null)
@@ -80,20 +91,52 @@ class SettingsViewModel(
         loadFaults()
     }
 
-    /** Returns false (nothing saved) when [url] is not a usable address. */
-    suspend fun saveServerUrl(url: String): Boolean = settingsRepo.setServerUrl(url)
-
-    fun testConnection() {
+    /**
+     * Saves [choice] and checks it. An unusable address shows Invalid and saves nothing; a change of
+     * server while transfers are active waits for [confirmSwitch].
+     */
+    fun selectServer(choice: ServerChoice) {
+        // Leaving a field and tapping Test both ask for the same choice.
+        if (choice == selecting || choice == _pendingSwitch.value) return
+        selecting = choice
         viewModelScope.launch {
-            _check.value = ConnectionCheck.Checking
-            _check.value = try {
-                if (health()) ConnectionCheck.Connected else ConnectionCheck.Failed(ErrorCopy.short(ErrorCode.UNKNOWN, MAX_TRIES))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                val code = runCatching { classifier.classify(e).code }.getOrDefault(ErrorCode.UNKNOWN)
-                ConnectionCheck.Failed(ErrorCopy.short(code, MAX_TRIES))
+            try {
+                val url = ServerProfiles.urlOf(choice)
+                if (url == null) {
+                    checkJob?.cancel()
+                    _check.value = ConnectionCheck.Result(ServerHealth.Invalid)
+                } else if (url != settingsRepo.current().serverUrl && hasActiveTransfers()) {
+                    _pendingSwitch.value = choice
+                } else {
+                    switchAndCheck(choice)
+                }
+            } finally {
+                selecting = null
             }
+        }
+    }
+
+    fun confirmSwitch() {
+        val choice = _pendingSwitch.value ?: return
+        _pendingSwitch.value = null
+        viewModelScope.launch { switchAndCheck(choice) }
+    }
+
+    fun cancelSwitch() {
+        _pendingSwitch.value = null
+    }
+
+    private suspend fun switchAndCheck(choice: ServerChoice) {
+        if (switchServer(choice)) testConnection() else _check.value = ConnectionCheck.Result(ServerHealth.Invalid)
+    }
+
+    /** Checks the saved server; a new check replaces one still running. */
+    fun testConnection() {
+        checkJob?.cancel()
+        checkJob = viewModelScope.launch {
+            _check.value = ConnectionCheck.Checking
+            val s = settingsRepo.settings.first()
+            checkHealth(s.serverProfile, s.serverUrl).collect { _check.value = ConnectionCheck.Result(it) }
         }
     }
 

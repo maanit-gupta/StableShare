@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -88,6 +89,30 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         return true
     }
 
+    /** Selects [choice] with the setter for its profile. Returns false (and stores nothing) if it is not usable. */
+    suspend fun setServerChoice(choice: ServerChoice): Boolean = when (choice.profile) {
+        ServerProfile.HOSTED, ServerProfile.EMULATOR -> setServerProfile(choice.profile)
+        ServerProfile.LAN -> setLanServer(choice.lanHost, choice.lanPort)
+        ServerProfile.CUSTOM -> setCustomUrl(choice.customUrl)
+    }
+
+    /** Remembers [ids] as paused by a switch away from [serverUrl], to resume when it is selected again. */
+    suspend fun parkTransfers(serverUrl: String, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        store.edit { it[KEY_PARKED] = it[KEY_PARKED].orEmpty() + ids.map { id -> "$serverUrl $id" } }
+    }
+
+    /** The ids parked for [serverUrl]; they are forgotten here. */
+    suspend fun takeParkedTransfers(serverUrl: String): List<String> {
+        var taken = emptyList<String>()
+        store.edit { prefs ->
+            val (mine, others) = prefs[KEY_PARKED].orEmpty().partition { it.substringBeforeLast(' ') == serverUrl }
+            taken = mine.map { it.substringAfterLast(' ') }
+            prefs[KEY_PARKED] = others.toSet()
+        }
+        return taken
+    }
+
     /** Selects LAN at `http://<host>:<port>`. Returns false (and stores nothing) if either is invalid. */
     suspend fun setLanServer(host: String, port: Int = ServerProfiles.DEFAULT_LAN_PORT): Boolean {
         ServerProfiles.lanUrl(host, port) ?: return false
@@ -157,6 +182,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         private val KEY_LAN_PORT = intPreferencesKey("lan_port")
         private val KEY_CUSTOM_URL = stringPreferencesKey("custom_url")
         private val KEY_SERVER_CHOSEN = booleanPreferencesKey("server_chosen")
+
+        /** "<server url> <transfer id>" for each transfer a server switch paused (URLs hold no spaces). */
+        private val KEY_PARKED = stringSetPreferencesKey("switch_parked_transfers")
         private val KEY_MAX_CONCURRENT = intPreferencesKey("max_concurrent")
         private val KEY_CHUNK_SIZE = intPreferencesKey("upload_chunk_size_bytes")
         private val KEY_AUTO_RETRY = booleanPreferencesKey("auto_retry_enabled")

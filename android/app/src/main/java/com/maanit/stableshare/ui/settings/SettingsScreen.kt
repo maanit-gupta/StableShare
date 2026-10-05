@@ -3,6 +3,25 @@ package com.maanit.stableshare.ui.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import com.maanit.stableshare.data.net.ServerHealth
+import com.maanit.stableshare.data.net.UnreachableReason
+import com.maanit.stableshare.data.settings.ServerChoice
+import com.maanit.stableshare.data.settings.ServerProfile
+import com.maanit.stableshare.data.settings.ServerProfiles
+import com.maanit.stableshare.data.settings.Settings
+import com.maanit.stableshare.ui.components.NeutralDialog
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,11 +55,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -54,7 +70,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -90,12 +105,10 @@ import com.maanit.stableshare.ui.components.SegmentedControl
 import com.maanit.stableshare.ui.components.SelectChip
 import com.maanit.stableshare.ui.components.StatusBarScrim
 import com.maanit.stableshare.ui.components.neutralCard
-import com.maanit.stableshare.ui.model.text
 import com.maanit.stableshare.ui.theme.LocalReducedMotion
 import com.maanit.stableshare.ui.theme.Motion
 import com.maanit.stableshare.ui.theme.Neutral
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private const val MIB = 1024 * 1024
@@ -129,7 +142,7 @@ fun SettingsScreen(
         ) {
             Text(stringResource(R.string.settings_title), style = Neutral.type.title)
 
-            Section(stringResource(R.string.settings_section_server)) { ServerCard(vm, s.serverUrl) }
+            Section(stringResource(R.string.settings_section_server), card = false) { ServerOptions(vm, s) }
             Section(stringResource(R.string.settings_section_transfers), Modifier.bringIntoViewRequester(transfersSection)) {
                 Label(stringResource(R.string.settings_concurrency))
                 SegmentedControl(
@@ -212,12 +225,12 @@ private fun SettingSwitch(label: String, helper: String, checked: Boolean, onChe
 }
 
 @Composable
-private fun Section(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+private fun Section(title: String, modifier: Modifier = Modifier, card: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier) {
         Spacer(Modifier.height(24.dp))
         Text(title, style = Neutral.type.rowTitle, color = Neutral.colors.inkSecondary)
         Spacer(Modifier.height(8.dp))
-        Column(Modifier.fillMaxWidth().neutralCard().padding(16.dp), content = content)
+        Column(if (card) Modifier.fillMaxWidth().neutralCard().padding(16.dp) else Modifier.fillMaxWidth(), content = content)
     }
 }
 
@@ -226,40 +239,286 @@ private fun Label(text: String, modifier: Modifier = Modifier) {
     Text(text, style = Neutral.type.body, modifier = modifier.padding(bottom = 4.dp))
 }
 
+private enum class ServerOption { HOSTED, LOCAL, CUSTOM }
+
+private fun ServerProfile.option() = when (this) {
+    ServerProfile.HOSTED -> ServerOption.HOSTED
+    ServerProfile.EMULATOR, ServerProfile.LAN -> ServerOption.LOCAL
+    ServerProfile.CUSTOM -> ServerOption.CUSTOM
+}
+
+/** Emulator unless the saved choice is, or last was, a phone on Wi-Fi. */
+private fun Settings.localMode() =
+    if (serverProfile == ServerProfile.LAN || (serverProfile != ServerProfile.EMULATOR && lanHost.isNotEmpty())) ServerProfile.LAN else ServerProfile.EMULATOR
+
+/**
+ * Server option cards (UI-SPEC §12.2). Picking a card saves it and checks it at once; a local
+ * address or custom URL that is still blank is saved when typed (Done or leaving the field).
+ */
 @Composable
-private fun ServerCard(vm: SettingsViewModel, saved: String) {
-    val c = Neutral.colors
-    val scope = rememberCoroutineScope()
+private fun ServerOptions(vm: SettingsViewModel, s: Settings) {
     val focus = LocalFocusManager.current
-    var text by rememberSaveable(saved) { mutableStateOf(saved) }
-    var invalid by remember { mutableStateOf(false) }
-    var focused by remember { mutableStateOf(false) }
-    fun save(then: () -> Unit = {}) {
-        scope.launch {
-            invalid = !vm.saveServerUrl(text)
-            if (!invalid) then()
+    val check by vm.check.collectAsStateWithLifecycle()
+    val pendingSwitch by vm.pendingSwitch.collectAsStateWithLifecycle()
+    var picked by rememberSaveable(s.serverProfile) { mutableStateOf(s.serverProfile.option()) }
+    var localMode by rememberSaveable(s.serverProfile) { mutableStateOf(s.localMode()) }
+    var host by rememberSaveable(s.lanHost) { mutableStateOf(s.lanHost) }
+    var port by rememberSaveable(s.lanPort) { mutableStateOf(s.lanPort.toString()) }
+    var portInvalid by remember { mutableStateOf(false) }
+    var custom by rememberSaveable(s.customUrl) { mutableStateOf(s.customUrl) }
+
+    /** What the cards show; null (with the port error shown) if the port is not a number in range. */
+    fun shown(): ServerChoice? = when (picked) {
+        ServerOption.HOSTED -> ServerChoice(ServerProfile.HOSTED)
+        ServerOption.LOCAL -> if (localMode == ServerProfile.EMULATOR) {
+            ServerChoice(ServerProfile.EMULATOR)
+        } else {
+            val p = port.trim().toIntOrNull()?.takeIf { it in 1..65535 }
+            portInvalid = p == null
+            p?.let { ServerChoice(ServerProfile.LAN, lanHost = host.trim(), lanPort = it) }
+        }
+        ServerOption.CUSTOM -> ServerChoice(ServerProfile.CUSTOM, customUrl = custom)
+    }
+    fun isSaved(c: ServerChoice) = c.profile == s.serverProfile && ServerProfiles.urlOf(c) == s.serverUrl
+    fun isBlank(c: ServerChoice) = when (c.profile) {
+        ServerProfile.LAN -> c.lanHost.isBlank()
+        ServerProfile.CUSTOM -> c.customUrl.isBlank()
+        ServerProfile.HOSTED, ServerProfile.EMULATOR -> false
+    }
+    /** Saves what the cards show; a blank address waits for typing unless [typed]. */
+    fun save(typed: Boolean = false) {
+        val c = shown() ?: return
+        if (isSaved(c) || (!typed && isBlank(c))) return
+        vm.selectServer(c)
+    }
+    fun test() {
+        val c = shown() ?: return
+        if (isSaved(c)) vm.testConnection() else vm.selectServer(c)
+    }
+
+    val savedOption = s.serverProfile.option()
+    val status = (check as? ConnectionCheck.Result)?.health
+    val badge = when {
+        check == ConnectionCheck.Checking -> ServerDot.CHECKING
+        status is ServerHealth.Online -> ServerDot.ONLINE
+        status == ServerHealth.Waking -> ServerDot.WAKING
+        status is ServerHealth.Unreachable -> ServerDot.UNREACHABLE
+        else -> null
+    }
+    Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ServerOptionCard(
+            title = stringResource(R.string.settings_server_hosted),
+            subtitle = stringResource(R.string.settings_server_hosted_subtitle),
+            selected = picked == ServerOption.HOSTED,
+            badge = badge.takeIf { savedOption == ServerOption.HOSTED },
+            onSelect = { picked = ServerOption.HOSTED; save() },
+            tag = "serverHosted",
+        )
+        ServerOptionCard(
+            title = stringResource(R.string.settings_server_local),
+            subtitle = stringResource(R.string.settings_server_local_subtitle),
+            selected = picked == ServerOption.LOCAL,
+            badge = badge.takeIf { savedOption == ServerOption.LOCAL && s.serverProfile == localMode },
+            onSelect = { picked = ServerOption.LOCAL; save() },
+            tag = "serverLocal",
+        ) {
+            SegmentedControl(
+                options = listOf(ServerProfile.EMULATOR, ServerProfile.LAN),
+                selected = localMode,
+                label = {
+                    stringResource(if (it == ServerProfile.EMULATOR) R.string.settings_server_emulator else R.string.settings_server_phone)
+                },
+                onSelect = { localMode = it; save() },
+            )
+            if (localMode == ServerProfile.LAN) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ServerField(
+                        value = host,
+                        onValueChange = { host = it },
+                        label = stringResource(R.string.settings_server_host),
+                        keyboardType = KeyboardType.Uri,
+                        onDone = { save(typed = true); focus.clearFocus() },
+                        onLeave = { save() },
+                        modifier = Modifier.weight(1f).testTag("lanHost"),
+                    )
+                    ServerField(
+                        value = port,
+                        onValueChange = { port = it.filter(Char::isDigit).take(5); portInvalid = false },
+                        label = stringResource(R.string.settings_server_port),
+                        keyboardType = KeyboardType.Number,
+                        onDone = { save(typed = true); focus.clearFocus() },
+                        onLeave = { save() },
+                        isError = portInvalid,
+                        modifier = Modifier.width(96.dp).testTag("lanPort"),
+                    )
+                }
+                if (portInvalid) {
+                    Text(stringResource(R.string.settings_server_port_invalid), style = Neutral.type.meta, color = Neutral.colors.danger)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.settings_server_local_helper), style = Neutral.type.meta)
+        }
+        ServerOptionCard(
+            title = stringResource(R.string.settings_server_custom),
+            subtitle = stringResource(R.string.settings_server_custom_subtitle),
+            selected = picked == ServerOption.CUSTOM,
+            badge = badge.takeIf { savedOption == ServerOption.CUSTOM },
+            onSelect = { picked = ServerOption.CUSTOM; save() },
+            tag = "serverCustom",
+        ) {
+            ServerField(
+                value = custom,
+                onValueChange = { custom = it },
+                label = stringResource(R.string.settings_server_address),
+                keyboardType = KeyboardType.Uri,
+                onDone = { save(typed = true); focus.clearFocus() },
+                onLeave = { save() },
+                modifier = Modifier.fillMaxWidth().testTag("customUrl"),
+            )
         }
     }
+    Spacer(Modifier.height(16.dp))
+    OutlinedNeutralButton(
+        stringResource(R.string.settings_test_connection),
+        onClick = { focus.clearFocus(); test() },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    ConnectionStatusLine(check)
+
+    if (pendingSwitch != null) {
+        NeutralDialog(
+            title = stringResource(R.string.switch_dialog_title),
+            body = stringResource(R.string.switch_dialog_body),
+            dismissLabel = stringResource(R.string.switch_dialog_cancel),
+            confirmLabel = stringResource(R.string.switch_dialog_confirm),
+            destructive = false,
+            onDismiss = {
+                vm.cancelSwitch()
+                picked = savedOption
+                localMode = s.localMode()
+            },
+            onConfirm = vm::confirmSwitch,
+        )
+    }
+}
+
+/** The status dot's states (UI-SPEC §12.1); an invalid address shows no dot. */
+private enum class ServerDot { CHECKING, ONLINE, WAKING, UNREACHABLE }
+
+@Composable
+private fun ServerDot.color(): Color = when (this) {
+    ServerDot.CHECKING -> Neutral.colors.muted
+    ServerDot.ONLINE -> Neutral.colors.success
+    ServerDot.WAKING -> Neutral.colors.warning
+    ServerDot.UNREACHABLE -> Neutral.colors.danger
+}
+
+@Composable
+private fun StatusDot(dot: ServerDot) {
+    val fill by animateColorAsState(dot.color(), Motion.quick(), label = "statusDot")
+    Box(Modifier.size(8.dp).background(fill, CircleShape))
+}
+
+/** One selectable server card (UI-SPEC §12.2); [expanded] renders below the subtitle only while selected. */
+@Composable
+private fun ServerOptionCard(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    badge: ServerDot?,
+    onSelect: () -> Unit,
+    tag: String,
+    expanded: (@Composable ColumnScope.() -> Unit)? = null,
+) {
+    val c = Neutral.colors
+    val reduced = LocalReducedMotion.current
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .clip(shape)
+            .background(c.card, shape)
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) c.inkPrimary else c.border, shape),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 72.dp)
+                .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+                .testTag(tag)
+                .padding(16.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            RadioButton(
+                selected = selected,
+                onClick = null,
+                modifier = Modifier.size(20.dp),
+                colors = RadioButtonDefaults.colors(selectedColor = c.inkPrimary, unselectedColor = c.inkSecondary),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, style = Neutral.type.rowTitle, modifier = Modifier.weight(1f))
+                    if (selected && badge != null) {
+                        StatusDot(badge)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            stringResource(
+                                when (badge) {
+                                    ServerDot.CHECKING -> R.string.settings_checking
+                                    ServerDot.ONLINE -> R.string.server_status_online
+                                    ServerDot.WAKING -> R.string.server_status_waking
+                                    ServerDot.UNREACHABLE -> R.string.server_status_unreachable
+                                },
+                            ),
+                            style = Neutral.type.status,
+                            color = if (badge == ServerDot.CHECKING) c.inkTertiary else badge.color(),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(subtitle, style = Neutral.type.meta)
+            }
+        }
+        if (expanded != null) {
+            AnimatedVisibility(
+                selected,
+                enter = if (reduced) EnterTransition.None else expandVertically(Motion.standard()),
+                exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.standard()),
+            ) {
+                // Lines up with the title column: 16 dp padding + 20 dp radio + 12 dp gap.
+                Column(Modifier.padding(start = 48.dp, end = 16.dp, bottom = 16.dp), content = expanded)
+            }
+        }
+    }
+}
+
+/** A Settings text field (UI-SPEC §5.10). [onLeave] runs when focus leaves it. */
+@Composable
+private fun ServerField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    keyboardType: KeyboardType,
+    onDone: () -> Unit,
+    onLeave: () -> Unit,
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+) {
+    val c = Neutral.colors
+    var focused by remember { mutableStateOf(false) }
     OutlinedTextField(
-        value = text,
-        onValueChange = {
-            text = it
-            invalid = false
-        },
-        label = { Text(stringResource(R.string.settings_server_address)) },
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
         singleLine = true,
-        isError = invalid,
-        supportingText = if (invalid) {
-            { Text(stringResource(R.string.settings_server_invalid), color = c.danger) }
-        } else {
-            null
-        },
+        isError = isError,
         shape = RoundedCornerShape(12.dp),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = {
-            save()
-            focus.clearFocus()
-        }),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
         colors = OutlinedTextFieldDefaults.colors(
             unfocusedBorderColor = c.border,
             focusedBorderColor = c.inkPrimary,
@@ -269,45 +528,48 @@ private fun ServerCard(vm: SettingsViewModel, saved: String) {
             errorLabelColor = c.danger,
         ),
         textStyle = Neutral.type.body.copy(color = c.inkPrimary),
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged {
-                if (focused && !it.isFocused) save()
-                focused = it.isFocused
-            },
+        modifier = modifier.onFocusChanged {
+            if (focused && !it.isFocused) onLeave()
+            focused = it.isFocused
+        },
     )
-    Spacer(Modifier.height(8.dp))
-    Text(stringResource(R.string.settings_server_helper), style = Neutral.type.meta)
-    Spacer(Modifier.height(12.dp))
-    OutlinedNeutralButton(
-        stringResource(R.string.settings_test_connection),
-        onClick = { save { vm.testConnection() } },
-        modifier = Modifier.fillMaxWidth(),
-    )
-    val check by vm.check.collectAsStateWithLifecycle()
-    when (val result = check) {
-        ConnectionCheck.Idle -> Unit
-        ConnectionCheck.Checking -> ResultLine {
-            CircularProgressIndicator(Modifier.size(16.dp), color = c.inkSecondary, strokeWidth = 2.dp)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.settings_checking), style = Neutral.type.body)
-        }
-        ConnectionCheck.Connected -> ResultLine {
-            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = c.success, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.settings_connected), style = Neutral.type.body)
-        }
-        is ConnectionCheck.Failed -> ResultLine {
-            Icon(Icons.Outlined.Error, contentDescription = null, tint = c.danger, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.settings_couldnt_connect, result.reason.text()), style = Neutral.type.body)
-        }
-    }
 }
 
+/** The line under "Test connection": the check's result in words (UI-SPEC §12.1 colours). */
 @Composable
-private fun ResultLine(content: @Composable () -> Unit) {
-    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { content() }
+private fun ConnectionStatusLine(check: ConnectionCheck) {
+    val c = Neutral.colors
+    val (dot, text) = when (check) {
+        ConnectionCheck.Idle -> return
+        ConnectionCheck.Checking -> ServerDot.CHECKING to stringResource(R.string.settings_checking)
+        is ConnectionCheck.Result -> when (val h = check.health) {
+            is ServerHealth.Online -> ServerDot.ONLINE to stringResource(R.string.settings_connected_in, h.latencyMs.toInt())
+            ServerHealth.Waking -> ServerDot.WAKING to stringResource(R.string.settings_waking)
+            is ServerHealth.Unreachable -> ServerDot.UNREACHABLE to stringResource(
+                when (h.reason) {
+                    UnreachableReason.NoInternet -> R.string.settings_no_internet
+                    UnreachableReason.CleartextBlocked -> R.string.settings_cleartext
+                    else -> R.string.settings_unreachable
+                },
+            )
+            ServerHealth.Invalid -> null to stringResource(R.string.settings_server_invalid)
+        }
+    }
+    Row(Modifier.padding(top = 12.dp).semantics { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically) {
+        if (dot != null) {
+            StatusDot(dot)
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(
+            text,
+            style = Neutral.type.status,
+            color = when (dot) {
+                null -> c.danger
+                ServerDot.CHECKING -> c.inkTertiary
+                else -> dot.color()
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

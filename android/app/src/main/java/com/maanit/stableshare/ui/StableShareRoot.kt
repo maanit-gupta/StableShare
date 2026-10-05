@@ -183,12 +183,13 @@ fun StableShareRoot(
                     val vm = appViewModel {
                         SettingsViewModel(
                             settingsRepo = settingsRepository,
-                            health = { protocolClient.health().ok },
+                            checkHealth = serverHealthChecker::check,
+                            hasActiveTransfers = serverSwitch::hasActiveTransfers,
+                            switchServer = serverSwitch::switchTo,
                             getFaults = { protocolClient.getFaults() },
                             putFaults = { protocolClient.putFaults(it) },
                             resetFaults = { protocolClient.resetFaults() },
                             getStats = { protocolClient.getStats() },
-                            classifier = errorClassifier,
                         )
                     }
                     SettingsScreen(

@@ -80,12 +80,13 @@ class SettingsScreenTest {
                                     val offline: suspend () -> Nothing = { throw IOException("no server in tests") }
                                     SettingsViewModel(
                                         settingsRepo = container.settingsRepository,
-                                        health = { false },
+                                        checkHealth = container.serverHealthChecker::check,
+                                        hasActiveTransfers = container.serverSwitch::hasActiveTransfers,
+                                        switchServer = container.serverSwitch::switchTo,
                                         getFaults = offline,
                                         putFaults = { offline() },
                                         resetFaults = offline,
                                         getStats = offline,
-                                        classifier = container.errorClassifier,
                                     )
                                 }
                             },
@@ -131,7 +132,7 @@ class SettingsScreenTest {
 
         compose.waitUntil(5_000) { compose.onAllNodes(hasAncestorTag("parallelChunks")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Pieces at once per transfer").assertExists()
-        compose.onNodeWithText("More pieces at once can be faster on a good connection. Applies to transfers that start after you change it.").assertExists()
+        compose.onNodeWithText("More pieces at once can be faster on a good connection. Applies to new transfers.").assertExists()
         assertEquals("only 1, 2 and 4", 3, compose.onAllNodes(hasAncestorTag("parallelChunks") and hasClickAction()).fetchSemanticsNodes().size)
         segment(1).performScrollTo().assertIsSelected()
         segment(4).assertIsNotSelected()

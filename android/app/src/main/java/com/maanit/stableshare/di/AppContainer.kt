@@ -27,6 +27,7 @@ import com.maanit.stableshare.engine.PipelineEnv
 import com.maanit.stableshare.engine.PreviousProcessExit
 import com.maanit.stableshare.engine.RestoredTransfers
 import com.maanit.stableshare.engine.RunLease
+import com.maanit.stableshare.engine.ServerSwitch
 import com.maanit.stableshare.engine.TransferController
 import com.maanit.stableshare.engine.TransferEngine
 import com.maanit.stableshare.engine.TransferProgressTracker
@@ -173,6 +174,8 @@ class AppContainer(context: Context) {
             engine = transferEngine,
         )
     }
+
+    val serverSwitch: ServerSwitch by lazy { ServerSwitch(settingsRepository, transferRepository, transferController) }
 
     val workerFactory: AppWorkerFactory by lazy {
         AppWorkerFactory(engine = { transferEngine }, scheduler = { scheduler }, notifications = { notifications })
